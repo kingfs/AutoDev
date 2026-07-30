@@ -20,7 +20,7 @@ export class GitLabClient implements SCMClient {
     const root = `/projects/${encodeURIComponent(item.repository.id)}/issues/${item.issue.number}/notes`;
     const marker = markerFrom(body);
     if (marker) {
-      const notes = await this.#request<Array<{ id: number; body: string }>>(`${root}?per_page=100&sort=desc`, {}, [200]);
+      const notes = await this.#paginate<{ id: number; body: string }>(root, "&sort=desc");
       const existing = notes.find((note) => note.body.includes(marker));
       if (existing) {
         await this.#request(`${root}/${existing.id}`, { method: "PUT", body: JSON.stringify({ body }) }, [200]);
@@ -59,11 +59,22 @@ export class GitLabClient implements SCMClient {
   }
 
   async failedJobs(repositoryId: string, pipeline: Pipeline): Promise<JobFailure[]> {
-    const jobs = await this.#request<Array<{ id: number; name: string; web_url: string; status: string }>>(`/projects/${encodeURIComponent(repositoryId)}/pipelines/${pipeline.id}/jobs?scope[]=failed`, {}, [200]);
+    const jobs = await this.#paginate<{ id: number; name: string; web_url: string; status: string }>(`/projects/${encodeURIComponent(repositoryId)}/pipelines/${pipeline.id}/jobs`, "&scope[]=failed");
     return Promise.all(jobs.filter((job) => job.status === "failed").map(async (job) => {
       const response = await this.#fetch(`${this.#baseUrl}/api/v4/projects/${encodeURIComponent(repositoryId)}/jobs/${job.id}/trace`, { headers: this.#headers() });
       return { id: String(job.id), name: job.name, url: job.web_url, log: (await response.text()).slice(-200_000) };
     }));
+  }
+
+  async #paginate<T>(root: string, suffix = ""): Promise<T[]> {
+    const values: T[] = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const separator = root.includes("?") ? "&" : "?";
+      const entries = await this.#request<T[]>(`${root}${separator}per_page=100&page=${page}${suffix}`, {}, [200]);
+      values.push(...entries);
+      if (entries.length < 100) return values;
+    }
+    throw new Error(`GitLab pagination exceeded 100 pages for ${root}`);
   }
 
   #request<T>(path: string, init: RequestInit, expected: number[]): Promise<T> {

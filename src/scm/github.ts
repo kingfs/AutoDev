@@ -21,7 +21,7 @@ export class GitHubClient implements SCMClient {
     const root = `/repos/${this.#repository}/issues/${item.issue.number}/comments`;
     const marker = body.match(/<!-- autodev:[^>]+ -->/)?.[0];
     if (marker) {
-      const comments = await this.#request<Array<{ id: number; body: string }>>(`${root}?per_page=100`, {}, [200]);
+      const comments = await this.#paginate<{ id: number; body: string }>(root);
       const existing = comments.find((comment) => comment.body.includes(marker));
       if (existing) {
         await this.#request(`/repos/${this.#repository}/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) }, [200]);
@@ -57,13 +57,38 @@ export class GitHubClient implements SCMClient {
   }
 
   async failedJobs(_repositoryId: string, pipeline: Pipeline): Promise<JobFailure[]> {
-    const result = await this.#request<{ jobs: Array<{ id: number; name: string; html_url: string; conclusion: string | null; steps?: Array<{ name: string; conclusion: string | null }> }> }>(`/repos/${this.#repository}/actions/runs/${pipeline.id}/jobs?filter=latest`, {}, [200]);
-    return result.jobs.filter((job) => job.conclusion === "failure").map((job) => ({ id: String(job.id), name: job.name, url: job.html_url, log: (job.steps ?? []).filter((step) => step.conclusion === "failure").map((step) => `failed step: ${step.name}`).join("\n") }));
+    const jobs = await this.#paginate<{ id: number; name: string; html_url: string; conclusion: string | null; steps?: Array<{ name: string; conclusion: string | null }> }>(`/repos/${this.#repository}/actions/runs/${pipeline.id}/jobs`, "jobs", "&filter=latest");
+    return Promise.all(jobs.filter((job) => job.conclusion === "failure").map(async (job) => {
+      const steps = (job.steps ?? []).filter((step) => step.conclusion === "failure").map((step) => `failed step: ${step.name}`).join("\n");
+      let log = steps;
+      try { log = await this.#requestText(`/repos/${this.#repository}/actions/jobs/${job.id}/logs`); } catch { /* Step evidence remains available when logs are unavailable. */ }
+      return { id: String(job.id), name: job.name, url: job.html_url, log: log.slice(-200_000) };
+    }));
+  }
+
+  async #paginate<T>(root: string, field?: string, suffix = ""): Promise<T[]> {
+    const values: T[] = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const separator = root.includes("?") ? "&" : "?";
+      const result = await this.#request<T[] | Record<string, unknown>>(`${root}${separator}per_page=100&page=${page}${suffix}`, {}, [200]);
+      const entries = (field ? (result as Record<string, unknown>)[field] : result) as T[];
+      values.push(...entries);
+      if (entries.length < 100) return values;
+    }
+    throw new Error(`GitHub pagination exceeded 100 pages for ${root}`);
+  }
+
+  async #requestText(path: string): Promise<string> {
+    const response = await this.#fetch(`${this.#baseUrl}${path}`, { headers: this.#headers(), signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) throw new Error(`GET ${path} failed with HTTP ${response.status}`);
+    return response.text();
   }
 
   #request<T>(path: string, init: RequestInit, expected: number[]): Promise<T> {
-    return requestJson<T>(this.#fetch, `${this.#baseUrl}${path}`, { ...init, headers: { "Accept": "application/vnd.github+json", "Authorization": `Bearer ${this.#token}`, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" } }, expected);
+    return requestJson<T>(this.#fetch, `${this.#baseUrl}${path}`, { ...init, headers: this.#headers() }, expected);
   }
+
+  #headers(): HeadersInit { return { "Accept": "application/vnd.github+json", "Authorization": `Bearer ${this.#token}`, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" }; }
 }
 
 function mapPR(value: GitHubPR): ChangeRequest {
