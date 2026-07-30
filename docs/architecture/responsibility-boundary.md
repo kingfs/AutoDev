@@ -45,7 +45,7 @@ Some concerns cross both layers and require an explicit contract:
 | Secrets | Inject and redact configured secret values | Never serialize them; remove them from child-agent environments |
 | Workspace | Materialize the configured repository in a sandbox | Verify origin, branch, base SHA, cleanliness, and remote state |
 | Cancellation | Stop/cancel the sandbox or scheduler run | Observe an abort/deadline and persist a workflow terminal state |
-| Concurrency | Limit scheduler/sandbox execution | Serialize mutable operations for the same repository/task identity |
+| Concurrency | Limit scheduler/sandbox execution | Keep a repository lease as defense in depth for manual/cross-entry runs |
 | Logs | Preserve platform run logs | Sanitize task artifacts and bounded evidence |
 
 `secret: true` protects platform display and configuration handling. It does

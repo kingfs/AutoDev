@@ -18,7 +18,6 @@ export const autoDevConfigSchema = z.object({
   }),
   automation: z.object({
     mode: z.enum(["plan-only", "draft", "no-push"]).default("draft"),
-    repository_concurrency: z.number().int().positive().default(1),
     local_repair_limit: z.number().int().nonnegative().default(2),
     ci_repair_limit: z.number().int().nonnegative().default(2),
     run_timeout: z.string().default("3h"),
