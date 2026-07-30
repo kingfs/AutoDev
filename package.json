@@ -1,0 +1,27 @@
+{
+  "name": "@kingfs/autodev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Policy-driven AI software-development automation on agent-compose.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@chaitin-ai/agent-compose-runtime-sdk": "^0.7.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0"
+  }
+}
