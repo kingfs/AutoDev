@@ -9,10 +9,12 @@ case "$SCM_PROVIDER" in
   gitlab)
     source_id=autodev-gitlab
     prefix=webhook.gitlab.
+    token_header=X-Gitlab-Token
     ;;
   github)
     source_id=autodev-github
     prefix=webhook.github.
+    token_header=Authorization
     ;;
   *)
     echo "unsupported SCM_PROVIDER: $SCM_PROVIDER" >&2
@@ -23,7 +25,10 @@ esac
 curl --fail-with-body --silent --show-error \
   -X PUT "$AGENT_COMPOSE_HTTP_URL/api/webhook-sources/$source_id" \
   -H 'Content-Type: application/json' \
-  -d "$(printf '{\"name\":\"AutoDev %s\",\"enabled\":true,\"provider\":\"%s\",\"topic_prefix\":\"%s\",\"token\":\"%s\"}' "$SCM_PROVIDER" "$SCM_PROVIDER" "$prefix" "$AUTODEV_WEBHOOK_TOKEN")"
+  -d "$(printf '{\"name\":\"AutoDev %s\",\"enabled\":true,\"provider\":\"%s\",\"topic_prefix\":\"%s\",\"token\":\"%s\",\"token_header\":\"%s\"}' "$SCM_PROVIDER" "$SCM_PROVIDER" "$prefix" "$AUTODEV_WEBHOOK_TOKEN" "$token_header")"
 
 echo
-echo "registered $source_id; configure the repository webhook with the same token"
+echo "已注册 Webhook Source：$source_id"
+if [[ "$SCM_PROVIDER" == github ]]; then
+  echo "注意：GitHub Webhook 需要由 relay 验证 X-Hub-Signature-256，再使用 Bearer Token 转发。"
+fi

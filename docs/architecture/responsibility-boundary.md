@@ -1,55 +1,49 @@
-# AutoDev and agent-compose responsibility boundary
+# AutoDev 与 agent-compose 职责边界
 
-AutoDev is a development workflow application running on agent-compose. It
-must consume platform capabilities instead of reimplementing them.
+AutoDev 是运行在 agent-compose 上的自动化开发工作流应用。平台已经提供的
+能力应直接使用，而不是在 AutoDev 中重复实现。
 
-## agent-compose owns
+## agent-compose 负责
 
-- webhook endpoint authentication, token/signature storage, request size
-  limits, delivery ingestion, and event dispatch;
-- secret declaration, injection, and presentation redaction through
-  `secret: true`;
-- sandbox creation, isolation policy, lifecycle, cancellation, and resource
-  limits;
-- Git workspace cloning/provisioning and credential installation;
-- scheduler trigger concurrency and run/session lifecycle;
-- Agent/LLM provider execution, authentication, sessions, and runtime usage
-  accounting;
-- volume provisioning and platform-level persistence.
+- Webhook 入口、Token 鉴权、请求大小限制、事件接收和分发；
+- 通过 `secret: true` 声明、注入和展示脱敏敏感值；
+- Sandbox 创建、隔离策略、生命周期、取消和资源限制；
+- Git Workspace Clone/Provision 和凭据安装；
+- Scheduler 并发策略及 Run/Sandbox 生命周期；
+- Agent/LLM Provider 执行、认证、会话和用量统计；
+- Volume 和平台层持久化。
 
-AutoDev configuration must reference these capabilities. It must not persist a
-copy of webhook secrets, model credentials, or Git credentials in run state.
+AutoDev 只能引用这些能力，不能把 Webhook Secret、模型凭据或 Git 凭据复制到
+自己的运行状态中。
 
-## AutoDev owns
+当前 agent-compose Webhook 接收路径支持 Bearer Token 和自定义 Token Header。
+GitLab 可以使用 `X-Gitlab-Token` 直连。GitHub HMAC 签名校验需要 relay 或未来
+agent-compose 原生能力。
 
-- provider payload normalization after agent-compose admits the event;
-- repository, label, issue-author, and event-actor authorization;
-- task/run identity and workflow-level deduplication semantics;
-- durable development-stage state and revision invalidation;
-- repository-specific quality-gate policy and deterministic evidence;
-- Git branch/baseline invariants inside the provisioned workspace;
-- observe-before-act semantics for branch push, MR/PR, comments, and CI;
-- bounded repair policy and human-handoff decisions;
-- SCM API adaptation, pagination, transient-error handling, and exact-SHA CI
-  interpretation;
-- redaction of repository command output and CI evidence before those values
-  are stored or sent to a model.
+## AutoDev 负责
 
-## Shared boundary contracts
+- 在 agent-compose 接收事件后归一化 Provider Payload；
+- 仓库、标签、Issue 作者和事件操作者授权；
+- Task/Run 身份和工作流级幂等语义；
+- 开发阶段持久状态和 revision 证据失效；
+- 仓库专用质量策略和确定性证据；
+- Workspace 内的 Git Branch/Baseline 不变量；
+- Push、MR/PR、评论和 CI 的先观察后操作；
+- 有限修复预算和人工交接；
+- SCM API 适配、分页、瞬时错误和精确 SHA CI 解释；
+- 命令输出和 CI 证据在持久化或发送给模型前的脱敏。
 
-Some concerns cross both layers and require an explicit contract:
+## 共同边界契约
 
-| Concern | agent-compose contract | AutoDev contract |
+| 关注点 | agent-compose | AutoDev |
 | --- | --- | --- |
-| Webhook trust | Authenticate the source and emit source metadata | Trust only configured event topics; authorize actor and repository |
-| Secrets | Inject and redact configured secret values | Never serialize them; remove them from child-agent environments |
-| Workspace | Materialize the configured repository in a sandbox | Verify origin, branch, base SHA, cleanliness, and remote state |
-| Cancellation | Stop/cancel the sandbox or scheduler run | Observe an abort/deadline and persist a workflow terminal state |
-| Concurrency | Limit scheduler/sandbox execution | Keep a repository lease as defense in depth for manual/cross-entry runs |
-| Logs | Preserve platform run logs | Sanitize task artifacts and bounded evidence |
+| Webhook 信任 | 鉴权来源并生成事件 | 只接收配置 Topic，授权仓库和操作者 |
+| Secret | 注入并对配置展示脱敏 | 不序列化，调用 Agent 前移除敏感环境变量 |
+| Workspace | 在 Sandbox 中准备仓库 | 验证 Origin、Branch、Base SHA、Cleanliness 和远端状态 |
+| 取消 | 停止 Scheduler Run/Sandbox | 接收终止信号并持久化终态 |
+| 并发 | 限制 Scheduler/Sandbox 重叠运行 | 仓库租约作为手动或跨入口运行的额外防线 |
+| 日志 | 保存平台 Run 日志 | 清洗任务 Artifact 和有限失败证据 |
 
-`secret: true` protects platform display and configuration handling. It does
-not make a secret safe to expose to an arbitrary process in the same sandbox.
-For a strict publisher boundary, agent-compose must provide separate sandbox or
-capability placement; AutoDev should then place its privileged publisher in
-that boundary rather than implementing a competing secret store.
+`secret: true`保护平台配置处理和展示，但不能让同一 Sandbox 内的任意进程天然
+无法读取 Secret。严格 Publisher 边界需要 agent-compose 提供独立 Sandbox 或
+Capability Placement；AutoDev 应使用该边界，而不是实现另一套 Secret Store。

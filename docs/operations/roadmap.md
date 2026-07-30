@@ -1,68 +1,68 @@
-# Delivery roadmap
+# 交付路线图
 
-## Phase 0: Architecture baseline — complete
+## 阶段 0：架构基线——已完成
 
-- Define execution-plane boundary, state model, workflow invariants, security
-  model, portability contract, and repository layout.
+- 定义 Agent/控制平面边界；
+- 定义状态模型、工作流不变量、安全模型和可移植配置；
+- 明确 AutoDev 与 agent-compose 的职责划分。
 
-Exit criteria: architecture and ADRs reviewed.
+## 阶段 1：GitLab 垂直链路——已编码，等待真实环境证明
 
-## Phase 1: GitLab vertical slice — coded, live proof pending
+- GitLab Issue Hook 归一化和准入；
+- agent-compose Git Workspace 与 Scheduler；
+- Plan、Implement、Review、Repair；
+- 确定性质量门禁；
+- 可信 Commit、Push、Draft MR 和 Issue 评论；
+- 持久状态、幂等评论和仓库租约。
 
-- GitLab Issue Hook normalization and admission.
-- Single allowlisted repository and one mutating run at a time.
-- agent-compose Git workspace and service scheduler.
-- Structured probe/plan/implement calls.
-- Static repository policy and deterministic command gates.
-- At most two local repair attempts.
-- Trusted commit, push, draft MR creation, and issue comment.
-- File-backed durable state and sanitized artifacts.
+退出条件：在一次性真实 GitLab 仓库中完成 Issue 到 Draft MR；重复投递不创建
+重复分支、MR 或评论。
 
-Exit criteria: a fixture and a real test project complete issue-to-draft-MR;
-duplicate delivery creates neither a duplicate branch nor duplicate MR.
+## 阶段 2：CI 闭环——已编码并通过本地测试，等待真实环境证明
 
-## Phase 2: CI closure — coded and locally tested, live proof pending
+- 精确 Push SHA 的 Pipeline 观察；
+- 失败 Job 证据和有限 CI Repair；
+- deadline、取消、Workspace/远端恢复；
+- revision 级证据失效和人工审批；
+- 证据脱敏、敏感信息扫描和变更范围限制。
 
-- Exact pushed-SHA GitLab pipeline observation.
-- Failed-job evidence collection and bounded CI repair.
-- Exact-SHA polling and finite CI repair budgets are coded.
-- Cancellation/deadline propagation, workspace/remote reconciliation,
-  revision-scoped repair, sanitized evidence, and change safety gates are
-  locally tested. Crash recovery has focused tests but needs production soak.
-- Webhook authentication, sandbox cancellation, and secret storage/injection
-  are agent-compose responsibilities and are configured rather than rebuilt.
+Webhook 鉴权、Secret 注入、Sandbox 取消属于 agent-compose，不在 AutoDev
+重复实现。
 
-Exit criteria: success, failed CI repair, cancellation, and restart paths pass
-integration tests.
+## 阶段 3：SCM 可移植性——已编码并通过本地测试
 
-## Phase 3: Provider portability — coded and locally tested, live proof pending
+- Provider-neutral SCM 接口；
+- GitHub Issues、PR 和 Actions；
+- GitHub/GitLab 分页与有限瞬时重试；
+- GitHub Actions 失败证据；
+- GitHub App 最小权限指南；
+- Go、TypeScript、Python 和 Monorepo 门禁示例。
 
-- Provider-neutral SCM domain interface.
-- GitHub Issues, PRs, and basic Actions status are coded.
-- SCM pagination, bounded transient retry, richer GitHub Actions evidence, and
-  GitHub App guidance are implemented. Live GitHub smoke remains.
-- Webhook signatures are verified by the configured agent-compose webhook
-  source, not by AutoDev.
-- Repository policy examples cover Go, TypeScript, Python, and monorepos.
+剩余条件：真实 GitHub App/relay Smoke Test。GitHub Webhook HMAC 校验当前需要
+relay 或未来 agent-compose 原生能力。
 
-Exit criteria: the same workflow core runs against GitLab and GitHub fixtures.
+## 阶段 4：规模化和运维——部分完成
 
-## Phase 4: Scale and operations — partially implemented
+已完成：
 
-- Per-run worktree/sandbox isolation and safe repository concurrency.
-- Structured run events and read-only run inspection are implemented. Metrics,
-  cleanup policy, and SLO dashboards remain. Event replay stays an
-  agent-compose platform operation.
-- Optional advisory multi-agent roles and cost-aware model routing.
-- Configuration scaffolding and upgrade compatibility.
+- 结构化运行事件；
+- AutoDev 状态只读查询；
+- agent-compose Project 模板；
+- 仓库策略和部署文档。
 
-Exit criteria: multiple repositories run from configuration without workflow
-forks and satisfy defined reliability/SLO targets.
+后续工作：
 
-## Delivery terminology
+- 生产指标、SLO 和 Dashboard；
+- Artifact/状态清理策略；
+- 多 Project 配置生成器；
+- 可选的成本感知模型路由；
+- agent-compose 提供的独立 Publisher Capability。
 
-- **coded**: an implementation exists and passes focused unit tests;
-- **tested**: boundary and crash/retry integration tests pass;
-- **proven**: a disposable real SCM repository passes the documented scenario;
-- **production-ready**: security boundaries, operations, and SLO evidence are
-  accepted for the intended deployment.
+Event Replay、Scheduler Run 管理和 Sandbox 清理由 agent-compose 平台负责。
+
+## 状态术语
+
+- **已编码**：存在实现并通过针对性单元测试；
+- **已测试**：边界、失败和恢复集成测试通过；
+- **已证明**：在一次性真实 SCM 仓库中完成文档场景；
+- **生产可用**：目标部署接受安全边界、运维能力和 SLO 证据。

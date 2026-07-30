@@ -1,7 +1,7 @@
-# Repository policy examples
+# 仓库质量门禁示例
 
-Quality-gate commands are trusted repository-owner configuration. Agents may
-propose checks, but cannot remove or replace these commands.
+质量门禁属于仓库维护者提供的可信配置。Agent 可以建议检查项，但不能删除、
+替换或降低这些门禁。
 
 ## Go
 
@@ -24,8 +24,8 @@ verification:
     - { id: build, command: npm run build }
 ```
 
-Dependency installation may need network access. Prefer a sandbox image with
-dependencies cached and use the repository's lockfile-enforcing command.
+依赖安装可能需要网络。建议在 Sandbox 镜像中预置依赖缓存，并始终使用能够
+强制校验 Lockfile 的安装命令。
 
 ## Python
 
@@ -37,7 +37,7 @@ verification:
     - { id: test, command: pytest -q }
 ```
 
-## Monorepo path rules
+## Monorepo 路径门禁
 
 ```yaml
 verification:
@@ -53,6 +53,6 @@ verification:
         - { id: api-test, command: go test ./..., cwd: services/api }
 ```
 
-Commands execute through `bash -lc` because they are trusted policy, not model
-output. Review policy changes like CI configuration and keep the policy file
-outside the target repository when issue authors are not fully trusted.
+门禁命令通过 `bash -lc` 执行，因此必须由可信维护者配置，不能直接采用 Issue
+或模型生成的任意命令。仓库策略的变更应像 CI 配置一样接受代码审查。如果
+Issue 作者并不完全可信，应把策略文件保存在目标仓库之外。

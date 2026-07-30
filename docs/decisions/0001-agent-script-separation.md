@@ -1,29 +1,26 @@
-# ADR 0001: Separate agent reasoning from deterministic control
+# ADR 0001：分离 Agent 推理与确定性控制
 
-- Status: Accepted
-- Date: 2026-07-30
+- 状态：已接受
+- 日期：2026-07-30
 
-## Context
+## 背景
 
-AI coding agents are effective at repository investigation, implementation, and
-repair, but their outputs are probabilistic. Git push, change-request creation,
-quality-gate results, retry budgets, and authorization require predictable and
-auditable behavior.
+AI Coding Agent 擅长仓库分析、实现和修复，但输出具有概率性。Git Push、
+MR/PR、质量门禁、修复预算和授权必须可预测、可审计。
 
-## Decision
+## 决策
 
-AutoDev uses two execution planes:
+AutoDev 使用两个执行平面：
 
-- agents perform reasoning and local code work;
-- trusted scripts validate and perform control-plane side effects.
+- Agent 负责推理和本地代码工作；
+- 可信控制程序负责验证和控制平面副作用。
 
-Agent outputs crossing the boundary use schemas and are treated as untrusted
-input. Scripts independently observe repository and remote state.
+跨越边界的 Agent 输出必须经过 Schema 校验，并始终视为不可信输入。控制程序
+独立观察仓库和远端状态。
 
-## Consequences
+## 影响
 
-- Workflow code is larger than a single autonomous-agent prompt.
-- External mutations are reproducible, idempotent, and testable.
-- Providers and models can be replaced without changing authorization policy.
-- Mechanical verification is reliable even when an agent's narrative is wrong.
-
+- 工作流代码比单一自治 Agent Prompt 更复杂；
+- 外部修改可重现、幂等且可测试；
+- 更换模型和 Provider 不需要改变授权策略；
+- 即使 Agent 的文字结论错误，机械验证仍然可信。

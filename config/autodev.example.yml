@@ -29,7 +29,7 @@ verification:
           cwd: frontend
 
 security:
-  # The user who performed the webhook action (for example, applied ai-ready).
+  # 实际执行 Webhook 操作的用户，例如添加 ai-ready 标签的维护者。
   allowed_actors:
     - trusted-maintainer
   max_changed_files: 200

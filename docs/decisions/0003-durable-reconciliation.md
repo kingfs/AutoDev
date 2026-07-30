@@ -1,25 +1,21 @@
-# ADR 0003: Model the workflow as durable reconciliation
+# ADR 0003：使用持久状态协调工作流
 
-- Status: Accepted
-- Date: 2026-07-30
+- 状态：已接受
+- 日期：2026-07-30
 
-## Context
+## 背景
 
-An automated development run can stop after a commit, push, MR/PR creation, or
-while waiting for CI. A purely linear in-memory script cannot safely determine
-what to repeat after restart and may duplicate remote side effects.
+自动开发任务可能在 Commit、Push、MR/PR 创建之后或等待 CI 时中断。纯内存
+线性脚本无法安全判断重启后应重复什么，可能造成远端副作用重复。
 
-## Decision
+## 决策
 
-Represent each stage as a condition over durable run state and observable Git,
-SCM, and CI reality. The controller dispatches eligible unsatisfied conditions.
-Results are revision-aware, and repair invalidates downstream conditions.
+每个阶段都建立在持久 Run State 和可观察的 Git、SCM、CI 事实之上。Controller
+只执行尚未满足的条件。所有结果绑定 revision，Repair 会让下游旧证据失效。
 
-## Consequences
+## 影响
 
-- Runs can resume safely after process or provider failure.
-- Side effects require explicit idempotency and observation rules.
-- The state model and reconciliation tests are core product behavior.
-- The MVP may implement a simple sequential dispatcher, but its persisted
-  contract must remain compatible with reconciliation.
-
+- 进程或 Provider 故障后可以恢复；
+- 所有副作用必须具备显式幂等和观察规则；
+- 状态模型和恢复测试属于核心产品行为；
+- MVP 可以按顺序调度，但持久状态契约必须持续兼容协调模型。

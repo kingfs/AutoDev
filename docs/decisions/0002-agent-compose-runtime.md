@@ -1,31 +1,28 @@
-# ADR 0002: Use agent-compose as the runtime platform
+# ADR 0002：使用 agent-compose 作为 Runtime 平台
 
-- Status: Accepted
-- Date: 2026-07-30
+- 状态：已接受
+- 日期：2026-07-30
 
-## Context
+## 背景
 
-AutoDev needs event triggers, schedulers, isolated sandboxes, Git workspaces,
-agent and LLM invocation, skills, secrets, sessions, cancellation, and run
-lifecycle management. Reimplementing these capabilities inside the workflow
-would create a second runtime and make projects difficult to operate uniformly.
+AutoDev 需要事件、Scheduler、Sandbox、Git Workspace、Agent/LLM、Skill、
+Secret、Session、取消和 Run 生命周期。若在工作流中重新实现，会形成第二套
+Runtime，增加维护和运维成本。
 
-## Decision
+## 决策
 
-Use agent-compose as the initial runtime and control-plane host. AutoDev remains
-a project workflow and policy layer. Runtime calls are isolated behind a thin
-adapter so workflow domain code does not depend on provider-specific APIs.
+使用 [agent-compose](https://github.com/chaitin/agent-compose) 作为 Runtime 和
+控制平面宿主。AutoDev 只实现工作流和策略层，通过薄适配器调用 Runtime，领域
+代码不依赖具体模型 API。
 
-Use a service-style scheduler workflow as the primary orchestration model. One
-controller owns run state and invokes logical agent roles through the runtime.
-Independent multi-agent event chains may be used for optional advisory work,
-but not for shared mutable Git state in the initial design.
+主编排采用服务式 Scheduler Workflow。一个 Controller 持有可变 Git 状态，
+不同逻辑角色通过 Runtime Agent 调用实现。初始设计不允许多个独立 Agent 并行
+修改同一个 Workspace。
 
-## Consequences
+## 影响
 
-- AutoDev benefits from agent-compose upgrades and provider support.
-- Git and workflow semantics remain testable outside a model invocation.
-- The first deployment requires an agent-compose daemon and guest image.
-- Runtime capability gaps should be added to agent-compose or covered by a thin
-  adapter, not by copying a full provider harness into AutoDev.
-
+- AutoDev 可以继承 agent-compose 的 Provider 和基础设施升级；
+- Git 和工作流语义可以脱离模型单独测试；
+- 部署依赖 agent-compose daemon 和 Guest Image；
+- Runtime 能力缺口应优先在 agent-compose 中补齐，或使用薄适配器，不应复制
+  完整 Provider Harness。

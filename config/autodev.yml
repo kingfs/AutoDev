@@ -1,5 +1,5 @@
 repository:
-  provider: gitlab
+  provider: ${SCM_PROVIDER}
   url: ${SCM_REPOSITORY_URL}
   default_branch: ${SCM_DEFAULT_BRANCH}
   required_label: ai-ready
