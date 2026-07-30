@@ -39,6 +39,10 @@ export const autoDevConfigSchema = z.object({
     allowed_authors: z.array(z.string()).default([]),
     allowed_actors: z.array(z.string()).default([]),
     agent_redacted_env: z.array(z.string()).default(["SCM_API_TOKEN", "GITLAB_TOKEN", "GITHUB_TOKEN"]),
+    max_changed_files: z.number().int().positive().default(200),
+    max_file_bytes: z.number().int().positive().default(2_000_000),
+    max_diff_bytes: z.number().int().positive().default(5_000_000),
+    secret_patterns: z.array(z.string()).default([]),
   }),
 });
 

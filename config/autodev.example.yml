@@ -33,6 +33,10 @@ security:
   # The user who performed the webhook action (for example, applied ai-ready).
   allowed_actors:
     - trusted-maintainer
+  max_changed_files: 200
+  max_file_bytes: 2000000
+  max_diff_bytes: 5000000
+  secret_patterns: []
   denied_paths:
     - ".github/workflows/**"
     - ".gitlab-ci.yml"

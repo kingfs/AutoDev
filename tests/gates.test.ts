@@ -23,8 +23,8 @@ describe("quality gates", () => {
 
   it("freezes repository and plan-derived checks without duplicates", () => {
     const gates = materializeGates(config, plan);
-    expect(gates.map((gate) => gate.id)).toEqual(["git-changes", "denied-paths", "base", "frontend"]);
-    expect(addChangedPathGates(gates, config, ["frontend/other.ts"])).toHaveLength(4);
+    expect(gates.map((gate) => gate.id)).toEqual(["git-changes", "denied-paths", "change-limits", "secret-scan", "base", "frontend"]);
+    expect(addChangedPathGates(gates, config, ["frontend/other.ts"])).toHaveLength(6);
   });
 
   it("executes commands and enforces denied paths", async () => {

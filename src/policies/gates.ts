@@ -6,6 +6,8 @@ export function materializeGates(config: AutoDevConfig, plan: PlanResult): Quali
   const gates: QualityGate[] = [
     { id: "git-changes", type: "git", description: "The task produces a non-empty scoped change.", required: true, source: "global" },
     { id: "denied-paths", type: "path", description: "No denied path is changed.", required: true, source: "global" },
+    { id: "change-limits", type: "security", description: "The change set stays within configured file, size, and symlink limits.", required: true, source: "global" },
+    { id: "secret-scan", type: "security", description: "The change does not contain credential material.", required: true, source: "global" },
   ];
   for (const check of config.verification.commands) {
     gates.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), source: "repository" });

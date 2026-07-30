@@ -86,7 +86,7 @@ export interface ImplementationResult {
   remainingRisks: string[];
 }
 
-export type GateType = "command" | "git" | "path" | "human" | "review";
+export type GateType = "command" | "git" | "path" | "security" | "human" | "review";
 
 export interface QualityGate {
   id: string;

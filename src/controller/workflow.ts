@@ -15,6 +15,7 @@ import { requiredGatesPassed, verifyGates } from "../stages/verify.js";
 import { beginRevision, createRunState, currentRevision, type RunState } from "../state/model.js";
 import type { RunStateStore } from "../state/store.js";
 import { parseDuration } from "../util/duration.js";
+import { configuredSecrets, redactText } from "../security/redact.js";
 
 export interface WorkflowDependencies {
   config: AutoDevConfig;
@@ -157,7 +158,8 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       if (!revision.ci || revision.ci.pipeline.sha !== revision.publication.pushedSha) {
         state.currentStage = "ci";
         const observed = await waitForPipeline({ scm: dependencies.scm, repositoryId: item.repository.id, sha: revision.publication.pushedSha, timeoutMs: parseDuration(dependencies.config.automation.ci_timeout) });
-        revision.ci = { ...observed, observedAt: new Date().toISOString() };
+        const secrets = configuredSecrets(dependencies.config.security.agent_redacted_env);
+        revision.ci = { ...observed, failures: observed.failures.map((failure) => ({ ...failure, log: redactText(failure.log, secrets) })), observedAt: new Date().toISOString() };
         await persist(dependencies.store, state);
       }
       if (revision.ci.pipeline.status === "success") {
@@ -182,7 +184,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
     return state;
   } catch (error) {
     state.status = "failed";
-    state.terminalReason = error instanceof Error ? error.message : String(error);
+    state.terminalReason = redactText(error instanceof Error ? error.message : String(error), configuredSecrets(dependencies.config.security.agent_redacted_env));
     await persist(dependencies.store, state);
     await report(dependencies, state).catch(() => undefined);
     return state;
