@@ -39,16 +39,18 @@ export class GitWorkspace {
     const headSha = (await runChecked("git", ["rev-parse", "HEAD"], { cwd: this.root })).stdout.trim();
     const changed = await runChecked("git", ["diff", "--name-only", base.baseSha], { cwd: this.root });
     const status = await runChecked("git", ["status", "--porcelain"], { cwd: this.root });
+    const tracked = changed.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const statusPaths = status.stdout.split(/\r?\n/).map((line) => line.slice(3).trim()).filter(Boolean);
     return {
       ...base,
       headSha,
-      changedFiles: changed.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+      changedFiles: [...new Set([...tracked, ...statusPaths])].sort(),
       clean: status.stdout.trim().length === 0,
     };
   }
 }
 
 function sameRepository(left: string, right: string): boolean {
-  const normalize = (value: string) => value.trim().replace(/\.git$/, "").replace(/^git@([^:]+):/, "https://$1/").replace(/\/$/, "");
+  const normalize = (value: string) => value.trim().replace(/^file:\/\//, "").replace(/\.git$/, "").replace(/^git@([^:]+):/, "https://$1/").replace(/\/$/, "");
   return normalize(left) === normalize(right);
 }

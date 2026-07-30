@@ -1,0 +1,59 @@
+name: autodev
+
+workspaces:
+  target:
+    provider: git
+    url: ${SCM_REPOSITORY_URL}
+    ref: ${SCM_DEFAULT_BRANCH}
+    target: .
+    token: ${SCM_GIT_TOKEN}
+
+volumes:
+  state:
+    name: autodev-state
+
+agents:
+  workflow:
+    provider: codex
+    build:
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - autodev-guest:latest
+    image: autodev-guest:latest
+    driver:
+      docker: {}
+    workspace:
+      name: target
+    volumes:
+      - state:/state
+      - type: bind
+        source: ./config/autodev.yml
+        target: /etc/autodev/config.yml
+        read_only: true
+    env:
+      SCM_REPOSITORY_URL: ${SCM_REPOSITORY_URL}
+      SCM_DEFAULT_BRANCH: ${SCM_DEFAULT_BRANCH}
+      SCM_REPOSITORY: ${SCM_REPOSITORY}
+      SCM_API_BASE_URL: ${SCM_API_BASE_URL}
+      SCM_API_TOKEN:
+        value: ${SCM_API_TOKEN}
+        secret: true
+      AUTODEV_CONFIG: /etc/autodev/config.yml
+      AUTODEV_WORKSPACE: /workspace
+      AUTODEV_STATE_ROOT: /state
+    scheduler:
+      enabled: true
+      sandbox_policy: new
+      script: |
+        async function run(event) {
+          return scheduler.shell("node /opt/autodev/dist/src/main.js", {
+            env: { AUTODEV_WEBHOOK_EVENT: JSON.stringify(event) },
+            timeoutMs: 10800000,
+            maxOutputBytes: 1048576,
+            sessionPolicy: "new",
+            title: "AutoDev issue workflow"
+          });
+        }
+        scheduler.on("webhook.gitlab.issue", "gitlab-issue", run);
+        scheduler.on("webhook.github.issues", "github-issues", run);

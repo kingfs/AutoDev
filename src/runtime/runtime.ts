@@ -22,8 +22,9 @@ export class AgentComposeRuntime implements DevelopmentRuntime {
   readonly #workspace: string;
   readonly #stateRoot: string;
   readonly #timeoutMs: number;
+  readonly #redactedEnv: string[];
 
-  constructor(options: { provider: string; workspace: string; stateRoot: string; timeoutMs: number }) {
+  constructor(options: { provider: string; workspace: string; stateRoot: string; timeoutMs: number; redactedEnv?: string[] }) {
     if (!["codex", "claude", "gemini", "opencode"].includes(options.provider)) {
       throw new Error(`unsupported agent provider ${options.provider}`);
     }
@@ -31,6 +32,7 @@ export class AgentComposeRuntime implements DevelopmentRuntime {
     this.#workspace = options.workspace;
     this.#stateRoot = options.stateRoot;
     this.#timeoutMs = options.timeoutMs;
+    this.#redactedEnv = options.redactedEnv ?? [];
   }
 
   plan(prompt: string): Promise<AgentCall<PlanResult>> {
@@ -50,13 +52,24 @@ export class AgentComposeRuntime implements DevelopmentRuntime {
   }
 
   async #call<T>(prompt: string, schema: { parse(value: unknown): T }): Promise<AgentCall<T>> {
-    const result = await runtime.agent<unknown>(prompt, {
-      provider: this.#provider,
-      workspace: this.#workspace,
-      stateRoot: this.#stateRoot,
-      timeoutMs: this.#timeoutMs,
-      outputSchema: schema as never,
-    });
+    const saved = new Map<string, string>();
+    for (const name of this.#redactedEnv) {
+      const value = process.env[name];
+      if (value !== undefined) saved.set(name, value);
+      delete process.env[name];
+    }
+    let result;
+    try {
+      result = await runtime.agent<unknown>(prompt, {
+        provider: this.#provider,
+        workspace: this.#workspace,
+        stateRoot: this.#stateRoot,
+        timeoutMs: this.#timeoutMs,
+        outputSchema: schema as never,
+      });
+    } finally {
+      for (const [name, value] of saved) process.env[name] = value;
+    }
     return { value: schema.parse(result.json), threadId: result.threadId, transcript: result.transcript };
   }
 }

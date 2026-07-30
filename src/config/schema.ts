@@ -23,6 +23,8 @@ export const autoDevConfigSchema = z.object({
     ci_repair_limit: z.number().int().nonnegative().default(2),
     run_timeout: z.string().default("3h"),
     agent_provider: z.string().default("codex"),
+    ci_watch: z.boolean().default(true),
+    ci_timeout: z.string().default("1h"),
   }),
   verification: z.object({
     commands: z.array(commandSchema).default([]),
@@ -35,6 +37,7 @@ export const autoDevConfigSchema = z.object({
     denied_paths: z.array(z.string()).default([]),
     require_human_review: z.array(z.string()).default([]),
     allowed_authors: z.array(z.string()).default([]),
+    agent_redacted_env: z.array(z.string()).default(["SCM_API_TOKEN", "GITLAB_TOKEN", "GITHUB_TOKEN"]),
   }),
 });
 

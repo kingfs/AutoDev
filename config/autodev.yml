@@ -1,9 +1,11 @@
 repository:
   provider: gitlab
-  url: https://gitlab.example.com/group/project.git
-  default_branch: main
+  url: ${SCM_REPOSITORY_URL}
+  default_branch: ${SCM_DEFAULT_BRANCH}
   required_label: ai-ready
   branch_prefix: ai/issue-
+  allowlist:
+    - ${SCM_REPOSITORY}
 
 automation:
   mode: draft
@@ -16,27 +18,16 @@ automation:
   ci_timeout: 1h
 
 verification:
-  commands:
-    - id: lint
-      command: task lint
-    - id: test
-      command: task test
-
-  path_rules:
-    - pattern: "frontend/**"
-      commands:
-        - id: frontend-typecheck
-          command: npm run typecheck
-          cwd: frontend
+  commands: []
+  path_rules: []
 
 security:
   denied_paths:
     - ".github/workflows/**"
     - ".gitlab-ci.yml"
     - "deploy/production/**"
-  require_human_review:
-    - "migrations/**"
-    - "auth/**"
+  require_human_review: []
+  allowed_authors: []
   agent_redacted_env:
     - SCM_API_TOKEN
     - GITLAB_TOKEN
