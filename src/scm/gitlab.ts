@@ -17,7 +17,17 @@ export class GitLabClient implements SCMClient {
   }
 
   async commentIssue(item: WorkItem, body: string): Promise<void> {
-    await this.#request(`/projects/${encodeURIComponent(item.repository.id)}/issues/${item.issue.number}/notes`, { method: "POST", body: JSON.stringify({ body }) }, [201]);
+    const root = `/projects/${encodeURIComponent(item.repository.id)}/issues/${item.issue.number}/notes`;
+    const marker = markerFrom(body);
+    if (marker) {
+      const notes = await this.#request<Array<{ id: number; body: string }>>(`${root}?per_page=100&sort=desc`, {}, [200]);
+      const existing = notes.find((note) => note.body.includes(marker));
+      if (existing) {
+        await this.#request(`${root}/${existing.id}`, { method: "PUT", body: JSON.stringify({ body }) }, [200]);
+        return;
+      }
+    }
+    await this.#request(root, { method: "POST", body: JSON.stringify({ body }) }, [201]);
   }
 
   async findChangeRequest(input: PublishChangeRequestInput): Promise<ChangeRequest | null> {
@@ -64,6 +74,8 @@ export class GitLabClient implements SCMClient {
     return { "Content-Type": "application/json", "PRIVATE-TOKEN": this.#token, ...(existing as Record<string, string> | undefined) };
   }
 }
+
+function markerFrom(body: string): string | null { return body.match(/<!-- autodev:[^>]+ -->/)?.[0] ?? null; }
 
 function mapMR(value: GitLabMR): ChangeRequest {
   return { id: String(value.id), number: value.iid, url: value.web_url, sourceBranch: value.source_branch, targetBranch: value.target_branch, state: value.state === "merged" ? "merged" : value.state === "closed" ? "closed" : "open", draft: Boolean(value.draft ?? value.work_in_progress) };

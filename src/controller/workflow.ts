@@ -181,7 +181,7 @@ async function persist(store: RunStateStore, state: RunState): Promise<RunState>
 async function exhaust(deps: WorkflowDependencies, state: RunState, reason: string): Promise<RunState> { state.status = "budget_exhausted"; state.terminalReason = reason; await report(deps, state); return state; }
 async function report(deps: WorkflowDependencies, state: RunState): Promise<void> {
   const revision = currentRevision(state);
-  const summary = [`AutoDev run **${state.status}**.`, "", state.terminalReason ?? "", state.plan ? `\nPlan: ${state.plan.summary}` : "", revision?.publication ? `\nChange request: ${revision.publication.changeRequest.url}` : ""].filter(Boolean).join("\n");
+  const summary = [`<!-- autodev:${state.runId} -->`, `AutoDev run **${state.status}**.`, "", state.terminalReason ?? "", state.plan ? `\nPlan: ${state.plan.summary}` : "", revision?.publication ? `\nChange request: ${revision.publication.changeRequest.url}` : ""].filter(Boolean).join("\n");
   await deps.scm.commentIssue(state.workItem, summary);
   state.report = { summary, reportedAt: new Date().toISOString() };
   await deps.store.save(state);

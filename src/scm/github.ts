@@ -18,7 +18,17 @@ export class GitHubClient implements SCMClient {
   }
 
   async commentIssue(item: WorkItem, body: string): Promise<void> {
-    await this.#request(`/repos/${this.#repository}/issues/${item.issue.number}/comments`, { method: "POST", body: JSON.stringify({ body }) }, [201]);
+    const root = `/repos/${this.#repository}/issues/${item.issue.number}/comments`;
+    const marker = body.match(/<!-- autodev:[^>]+ -->/)?.[0];
+    if (marker) {
+      const comments = await this.#request<Array<{ id: number; body: string }>>(`${root}?per_page=100`, {}, [200]);
+      const existing = comments.find((comment) => comment.body.includes(marker));
+      if (existing) {
+        await this.#request(`/repos/${this.#repository}/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) }, [200]);
+        return;
+      }
+    }
+    await this.#request(root, { method: "POST", body: JSON.stringify({ body }) }, [201]);
   }
 
   async findChangeRequest(input: PublishChangeRequestInput): Promise<ChangeRequest | null> {
