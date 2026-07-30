@@ -1,13 +1,13 @@
 # Delivery roadmap
 
-## Phase 0: Architecture baseline
+## Phase 0: Architecture baseline — complete
 
 - Define execution-plane boundary, state model, workflow invariants, security
   model, portability contract, and repository layout.
 
 Exit criteria: architecture and ADRs reviewed.
 
-## Phase 1: GitLab vertical slice
+## Phase 1: GitLab vertical slice — implemented
 
 - GitLab Issue Hook normalization and admission.
 - Single allowlisted repository and one mutating run at a time.
@@ -21,7 +21,7 @@ Exit criteria: architecture and ADRs reviewed.
 Exit criteria: a fixture and a real test project complete issue-to-draft-MR;
 duplicate delivery creates neither a duplicate branch nor duplicate MR.
 
-## Phase 2: CI closure
+## Phase 2: CI closure — implemented, production soak pending
 
 - Exact pushed-SHA GitLab pipeline observation.
 - Failed-job evidence collection and bounded CI repair.
@@ -31,7 +31,7 @@ duplicate delivery creates neither a duplicate branch nor duplicate MR.
 Exit criteria: success, failed CI repair, cancellation, and restart paths pass
 integration tests.
 
-## Phase 3: Provider portability
+## Phase 3: Provider portability — implementation complete, live GitHub smoke pending
 
 - Provider-neutral SCM domain interface.
 - GitHub Issues, PRs, Actions, signatures, pagination, and rate limits.
@@ -40,7 +40,7 @@ integration tests.
 
 Exit criteria: the same workflow core runs against GitLab and GitHub fixtures.
 
-## Phase 4: Scale and operations
+## Phase 4: Scale and operations — in progress
 
 - Per-run worktree/sandbox isolation and safe repository concurrency.
 - Metrics, run inspection, replay tooling, and cleanup policy.
@@ -49,4 +49,3 @@ Exit criteria: the same workflow core runs against GitLab and GitHub fixtures.
 
 Exit criteria: multiple repositories run from configuration without workflow
 forks and satisfy defined reliability/SLO targets.
-

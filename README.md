@@ -95,11 +95,30 @@ tests/fixtures/          Webhook and SCM fixtures
 tests/integration/       Workflow boundary tests
 ```
 
+## Quick start
+
+```bash
+npm ci
+npm run check
+npm test
+cp .env.example .env
+# Configure a disposable GitHub/GitLab repository and credentials in .env.
+agent-compose config --quiet
+agent-compose build
+agent-compose up
+```
+
+Register the webhook source with [register-webhook.sh](scripts/register-webhook.sh).
+Detailed safe test instructions are in [TESTING.md](TESTING.md).
+
 ## Status
 
-This repository currently contains the architecture baseline and delivery
-roadmap. Implementation will begin with a GitLab, single-repository,
-issue-to-draft-MR vertical slice. See [Roadmap](docs/operations/roadmap.md).
+The critical path is implemented for GitLab and GitHub: webhook normalization,
+admission, isolated Git preparation, structured plan/implementation/review,
+deterministic quality gates, bounded repair, trusted push and MR/PR publishing,
+exact-SHA CI observation, and idempotent issue reporting. Production adoption
+still requires repository-specific policy and a disposable end-to-end smoke
+test. See [Roadmap](docs/operations/roadmap.md) for hardening work.
 
 ## Non-goals
 
@@ -108,4 +127,3 @@ issue-to-draft-MR vertical slice. See [Roadmap](docs/operations/roadmap.md).
 - Let an agent decide whether its own tests passed.
 - Assume one validation command works for every repository.
 - Encode GitHub-, GitLab-, or D-Sensor-specific behavior in the workflow core.
-
