@@ -37,6 +37,7 @@ export const autoDevConfigSchema = z.object({
     denied_paths: z.array(z.string()).default([]),
     require_human_review: z.array(z.string()).default([]),
     allowed_authors: z.array(z.string()).default([]),
+    allowed_actors: z.array(z.string()).default([]),
     agent_redacted_env: z.array(z.string()).default(["SCM_API_TOKEN", "GITLAB_TOKEN", "GITHUB_TOKEN"]),
   }),
 });

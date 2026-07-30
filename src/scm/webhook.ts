@@ -17,6 +17,7 @@ function normalizeGitLab(payload: Record<string, unknown>, headers: Record<strin
   return {
     provider: "gitlab",
     deliveryId: headers["x-gitlab-event-uuid"] ?? digest(payload),
+    actor: String(user.username ?? user.name ?? "unknown"),
     action: String(attributes.action ?? payload.event_type ?? "update"),
     revision: updatedAt,
     repository: { provider: "gitlab", id: repositoryId, fullName: String(project.path_with_namespace ?? project.name ?? repositoryId), cloneUrl: String(project.git_http_url ?? project.http_url ?? ""), webUrl: String(project.web_url ?? ""), defaultBranch: String(project.default_branch ?? "main") },
@@ -28,6 +29,7 @@ function normalizeGitHub(payload: Record<string, unknown>, headers: Record<strin
   const repository = object(payload.repository);
   const issue = object(payload.issue);
   const user = object(issue.user);
+  const sender = object(payload.sender);
   const labels = array(issue.labels).map((label) => typeof label === "string" ? label : String(object(label).name ?? "")).filter(Boolean);
   const updatedAt = String(issue.updated_at ?? issue.created_at ?? new Date(0).toISOString());
   const issueId = String(issue.id ?? issue.number ?? "");
@@ -36,6 +38,7 @@ function normalizeGitHub(payload: Record<string, unknown>, headers: Record<strin
   return {
     provider: "github",
     deliveryId: headers["x-github-delivery"] ?? digest(payload),
+    actor: String(sender.login ?? "unknown"),
     action: String(payload.action ?? "update"),
     revision: updatedAt,
     repository: { provider: "github", id: repositoryId, fullName: String(repository.full_name ?? repository.name ?? repositoryId), cloneUrl: String(repository.clone_url ?? ""), webUrl: String(repository.html_url ?? ""), defaultBranch: String(repository.default_branch ?? "main") },

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { loadConfig } from "./config/load.js";
 import { executeWorkflow } from "./controller/workflow.js";
-import { idempotencyKey } from "./policies/admission.js";
+import { idempotencyKey, taskKey } from "./policies/admission.js";
 import { AgentComposeRuntime } from "./runtime/runtime.js";
 import { createSCMClient } from "./scm/factory.js";
 import { normalizeWebhook } from "./scm/webhook.js";
@@ -16,8 +16,10 @@ async function main(): Promise<void> {
   const rawEvent = JSON.parse(process.env.AUTODEV_WEBHOOK_EVENT ?? "{}") as { payload?: { body?: unknown; headers?: Record<string, string> } };
   const item = normalizeWebhook(config.repository.provider, rawEvent.payload?.body ?? rawEvent, lowerHeaders(rawEvent.payload?.headers ?? {}));
   const key = idempotencyKey(item);
-  const runId = `run-${item.issue.number}-${keyHash(key)}`;
   const store = new FileRunStateStore(path.join(stateRoot, "runs"));
+  const proposedRunId = `run-${item.issue.number}-${keyHash(taskKey(item))}`;
+  const claim = await store.claim(key, proposedRunId);
+  const runId = claim.runId;
   const leases = new FileLeaseManager(path.join(stateRoot, "leases"));
   const lease = await leases.acquire(`${item.provider}:${item.repository.id}`, runId, parseDuration(config.automation.run_timeout) + 300_000);
   if (!lease) throw new Error(`repository ${item.repository.fullName} already has an active AutoDev run`);

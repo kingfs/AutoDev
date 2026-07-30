@@ -32,7 +32,7 @@ describe("workflow integration", () => {
       security: {},
     });
     const item: WorkItem = {
-      provider: "gitlab", deliveryId: "d", action: "open", revision: "r",
+      provider: "gitlab", deliveryId: "d", actor: "alice", action: "open", revision: "r",
       repository: { provider: "gitlab", id: "1", fullName: "group/repo", cloneUrl: repositoryUrl, webUrl: "https://git.example/group/repo", defaultBranch: "main" },
       issue: { id: "2", number: 7, title: "Add feature", body: "Create feature.txt", labels: ["ai-ready"], author: "alice", url: "https://git.example/issues/7", updatedAt: "r" },
     };

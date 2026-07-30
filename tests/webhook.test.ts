@@ -11,6 +11,7 @@ describe("webhook normalization", () => {
     expect(item.repository.fullName).toBe("group/repo");
     expect(item.issue.labels).toEqual(["ai-ready"]);
     expect(item.deliveryId).toBe("delivery");
+    expect(item.actor).toBe("alice");
   });
 
   it("normalizes a GitHub issue hook", () => {
@@ -18,8 +19,10 @@ describe("webhook normalization", () => {
       action: "opened",
       repository: { id: 1, full_name: "org/repo", clone_url: "https://github/repo.git", html_url: "https://github/repo", default_branch: "main" },
       issue: { id: 2, number: 4, title: "Feature", body: "Body", updated_at: "2026-01-01T00:00:00Z", html_url: "https://github/issues/4", user: { login: "bob" }, labels: [{ name: "ai-ready" }] },
+      sender: { login: "maintainer" },
     }, { "x-github-delivery": "delivery" });
     expect(item.provider).toBe("github");
     expect(item.issue.author).toBe("bob");
+    expect(item.actor).toBe("maintainer");
   });
 });

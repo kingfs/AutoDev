@@ -10,6 +10,7 @@ import { FileRunStateStore } from "../src/state/store.js";
 const item: WorkItem = {
   provider: "gitlab",
   deliveryId: "delivery-1",
+  actor: "alice",
   action: "open",
   revision: "2026-07-30T00:00:00Z",
   repository: { provider: "gitlab", id: "1", fullName: "group/repo", cloneUrl: "https://git/repo.git", webUrl: "https://git/repo", defaultBranch: "main" },
@@ -23,6 +24,14 @@ describe("run state", () => {
     const state = createRunState("run-1", "key", item);
     await store.save(state);
     expect((await store.load("run-1"))?.workItem.issue.number).toBe(3);
+  });
+
+  it("atomically claims an idempotency key", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-state-"));
+    const store = new FileRunStateStore(root);
+    const [first, second] = await Promise.all([store.claim("event-key", "run-1"), store.claim("event-key", "run-2")]);
+    expect([first, second].filter((entry) => entry.claimed)).toHaveLength(1);
+    expect(first.runId).toBe(second.runId);
   });
 
   it("creates revision-scoped evidence", () => {

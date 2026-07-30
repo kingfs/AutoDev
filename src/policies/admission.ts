@@ -7,6 +7,10 @@ export function idempotencyKey(item: WorkItem): string {
   return [item.provider, item.repository.id, item.issue.id, item.action, item.revision].join(":");
 }
 
+export function taskKey(item: WorkItem): string {
+  return [item.provider, item.repository.id, item.issue.id].join(":");
+}
+
 export function decideAdmission(item: WorkItem, config: AutoDevConfig): AdmissionDecision {
   if (item.provider !== config.repository.provider) {
     return reject(`provider ${item.provider} does not match configured provider ${config.repository.provider}`, config);
@@ -24,6 +28,10 @@ export function decideAdmission(item: WorkItem, config: AutoDevConfig): Admissio
   const authors = config.security.allowed_authors;
   if (authors.length > 0 && !authors.includes(item.issue.author)) {
     return reject(`author ${item.issue.author} is not allowlisted`, config);
+  }
+  const actors = config.security.allowed_actors;
+  if (actors.length > 0 && !actors.includes(item.actor)) {
+    return reject(`event actor ${item.actor} is not allowlisted`, config);
   }
   return { accepted: true, mode: config.automation.mode, reason: "admission policy passed" };
 }

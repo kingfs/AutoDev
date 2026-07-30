@@ -23,6 +23,7 @@ export interface IssueRef {
 export interface WorkItem {
   provider: SCMProviderName;
   deliveryId: string;
+  actor: string;
   action: string;
   repository: RepositoryRef;
   issue: IssueRef;

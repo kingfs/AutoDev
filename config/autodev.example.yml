@@ -30,6 +30,9 @@ verification:
           cwd: frontend
 
 security:
+  # The user who performed the webhook action (for example, applied ai-ready).
+  allowed_actors:
+    - trusted-maintainer
   denied_paths:
     - ".github/workflows/**"
     - ".gitlab-ci.yml"

@@ -6,6 +6,7 @@ export interface RunStateStore {
   load(runId: string): Promise<RunState | null>;
   save(state: RunState): Promise<void>;
   findByIdempotencyKey(key: string): Promise<RunState | null>;
+  claim(key: string, runId: string): Promise<{ claimed: boolean; runId: string }>;
 }
 
 function safeRunId(runId: string): string {
@@ -51,10 +52,17 @@ export class FileRunStateStore implements RunStateStore {
     }
   }
 
-  async index(state: RunState): Promise<void> {
+  async claim(key: string, runId: string): Promise<{ claimed: boolean; runId: string }> {
     const indexRoot = path.join(this.#root, "idempotency");
     await mkdir(indexRoot, { recursive: true });
-    await writeFile(path.join(indexRoot, encodeURIComponent(state.idempotencyKey)), `${state.runId}\n`, { flag: "wx", mode: 0o600 });
+    const filename = path.join(indexRoot, encodeURIComponent(key));
+    try {
+      await writeFile(filename, `${runId}\n`, { flag: "wx", mode: 0o600 });
+      return { claimed: true, runId };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      return { claimed: false, runId: (await readFile(filename, "utf8")).trim() };
+    }
   }
 
   #filename(runId: string): string {
