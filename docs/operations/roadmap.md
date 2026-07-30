@@ -21,35 +21,38 @@ Exit criteria: architecture and ADRs reviewed.
 Exit criteria: a fixture and a real test project complete issue-to-draft-MR;
 duplicate delivery creates neither a duplicate branch nor duplicate MR.
 
-## Phase 2: CI closure — partially coded
+## Phase 2: CI closure — coded and locally tested, live proof pending
 
 - Exact pushed-SHA GitLab pipeline observation.
 - Failed-job evidence collection and bounded CI repair.
 - Exact-SHA polling and finite CI repair budgets are coded.
-- Cancellation propagation, restart reconciliation, end-to-end deadlines, and
-  sanitized artifacts remain AutoDev work.
+- Cancellation/deadline propagation, workspace/remote reconciliation,
+  revision-scoped repair, sanitized evidence, and change safety gates are
+  locally tested. Crash recovery has focused tests but needs production soak.
 - Webhook authentication, sandbox cancellation, and secret storage/injection
   are agent-compose responsibilities and are configured rather than rebuilt.
 
 Exit criteria: success, failed CI repair, cancellation, and restart paths pass
 integration tests.
 
-## Phase 3: Provider portability — basic adapters coded
+## Phase 3: Provider portability — coded and locally tested, live proof pending
 
 - Provider-neutral SCM domain interface.
 - GitHub Issues, PRs, and basic Actions status are coded.
-- SCM pagination, transient retry/rate-limit handling, richer GitHub Actions
-  evidence, GitHub App guidance, and live smoke tests remain.
+- SCM pagination, bounded transient retry, richer GitHub Actions evidence, and
+  GitHub App guidance are implemented. Live GitHub smoke remains.
 - Webhook signatures are verified by the configured agent-compose webhook
   source, not by AutoDev.
-- Repository policy examples for common stacks remain.
+- Repository policy examples cover Go, TypeScript, Python, and monorepos.
 
 Exit criteria: the same workflow core runs against GitLab and GitHub fixtures.
 
-## Phase 4: Scale and operations — in progress
+## Phase 4: Scale and operations — partially implemented
 
 - Per-run worktree/sandbox isolation and safe repository concurrency.
-- Metrics, run inspection, replay tooling, and cleanup policy.
+- Structured run events and read-only run inspection are implemented. Metrics,
+  cleanup policy, and SLO dashboards remain. Event replay stays an
+  agent-compose platform operation.
 - Optional advisory multi-agent roles and cost-aware model routing.
 - Configuration scaffolding and upgrade compatibility.
 

@@ -45,9 +45,9 @@ agents:
     scheduler:
       enabled: true
       sandbox_policy: new
-      # agent-compose owns scheduler concurrency; AutoDev's repository lease
-      # serializes only workflows that mutate the same repository.
-      concurrency_policy: parallel
+      # One project targets one repository. agent-compose prevents overlapping
+      # scheduler runs; AutoDev's lease remains defense in depth for manual runs.
+      concurrency_policy: skip
       script: |
         async function run(event) {
           return scheduler.shell("node /opt/autodev/dist/src/main.js", {

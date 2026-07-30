@@ -112,6 +112,9 @@ agent-compose up
 
 Register the webhook source with [register-webhook.sh](scripts/register-webhook.sh).
 Detailed safe test instructions are in [TESTING.md](TESTING.md).
+Repository gate examples are in
+[Policy examples](docs/operations/policy-examples.md); GitHub App deployment is
+covered by [GitHub App deployment](docs/operations/github-app.md).
 
 ## Status
 

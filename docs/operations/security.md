@@ -2,7 +2,9 @@
 
 ## Credentials
 
-SCM API credentials belong to the deterministic controller. AutoDev removes
+SCM API credentials are stored and injected by agent-compose using secret
+configuration; AutoDev does not implement a credential store. The injected
+SCM capability is consumed by the deterministic controller. AutoDev removes
 configured credential environment variables before invoking an agent runtime.
 Prompts, model transcripts, command artifacts, and issue reports must not
 contain credentials.
@@ -10,8 +12,9 @@ contain credentials.
 The current service-style deployment shares a sandbox with coding-agent child
 processes. Environment redaction prevents ordinary inheritance, but it is not a
 hardware or process-level security boundary. A production multi-tenant design
-should separate the privileged SCM publisher into a distinct service/capability
-that the coding sandbox cannot inspect or invoke without a verified gate token.
+requires agent-compose placement/capability support to separate the privileged
+SCM publisher from the coding sandbox. AutoDev should consume that platform
+boundary and pass only verified publication input across it.
 
 ## Untrusted inputs
 
