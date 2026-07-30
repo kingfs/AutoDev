@@ -6,6 +6,7 @@ import { AgentComposeRuntime } from "./runtime/runtime.js";
 import { createSCMClient } from "./scm/factory.js";
 import { normalizeWebhook } from "./scm/webhook.js";
 import { FileRunStateStore } from "./state/store.js";
+import { FileLeaseManager } from "./state/lease.js";
 import { parseDuration } from "./util/duration.js";
 
 async function main(): Promise<void> {
@@ -17,11 +18,19 @@ async function main(): Promise<void> {
   const key = idempotencyKey(item);
   const runId = `run-${item.issue.number}-${keyHash(key)}`;
   const store = new FileRunStateStore(path.join(stateRoot, "runs"));
-  const state = await executeWorkflow(item, runId, key, {
-    config, workspace, artifactRoot: path.join(stateRoot, "artifacts", runId), store,
-    runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
-    scm: createSCMClient(config),
-  });
+  const leases = new FileLeaseManager(path.join(stateRoot, "leases"));
+  const lease = await leases.acquire(`${item.provider}:${item.repository.id}`, runId, parseDuration(config.automation.run_timeout) + 300_000);
+  if (!lease) throw new Error(`repository ${item.repository.fullName} already has an active AutoDev run`);
+  let state;
+  try {
+    state = await executeWorkflow(item, runId, key, {
+      config, workspace, artifactRoot: path.join(stateRoot, "artifacts", runId), store,
+      runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
+      scm: createSCMClient(config),
+    });
+  } finally {
+    await leases.release(lease);
+  }
   console.log(`__AUTODEV_RESULT__${JSON.stringify({ runId, status: state.status, reason: state.terminalReason, report: state.report })}`);
   if (["failed", "budget_exhausted"].includes(state.status)) process.exitCode = 1;
 }
