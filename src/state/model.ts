@@ -62,6 +62,7 @@ export interface RunState {
   currentStage: string;
   terminalReason?: string;
   report?: { summary: string; reportedAt: string };
+  humanApprovals: Array<{ revision: number; actor: string; approvedAt: string }>;
 }
 
 export function currentRevision(state: RunState): RevisionState | undefined {
@@ -83,6 +84,7 @@ export function createRunState(runId: string, idempotencyKey: string, workItem: 
     localRepairCount: 0,
     ciRepairCount: 0,
     currentStage: "intake",
+    humanApprovals: [],
   };
 }
 
@@ -95,4 +97,25 @@ export function beginRevision(state: RunState, summary: string, now = new Date()
   state.revisions.push(revision);
   state.updatedAt = now.toISOString();
   return revision;
+}
+
+export function resumeFromHumanInput(state: RunState, item: WorkItem, idempotencyKey: string, approvalLabel: string, now = new Date()): boolean {
+  if (state.status !== "needs_human" || state.workItem.revision === item.revision) return false;
+  if (state.currentStage === "human-review") {
+    const revision = currentRevision(state);
+    if (!revision || !item.issue.labels.includes(approvalLabel)) return false;
+    state.humanApprovals.push({ revision: revision.number, actor: item.actor, approvedAt: now.toISOString() });
+  } else {
+    if (state.revisions.length > 0) return false;
+    delete state.plan;
+    state.gates = [];
+    delete state.gatesFrozenAt;
+  }
+  state.workItem = item;
+  state.idempotencyKey = idempotencyKey;
+  state.status = "running";
+  delete state.terminalReason;
+  delete state.report;
+  state.currentStage = "intake-resume";
+  return true;
 }

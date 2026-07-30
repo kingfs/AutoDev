@@ -43,6 +43,7 @@ export const autoDevConfigSchema = z.object({
     max_file_bytes: z.number().int().positive().default(2_000_000),
     max_diff_bytes: z.number().int().positive().default(5_000_000),
     secret_patterns: z.array(z.string()).default([]),
+    human_approval_label: z.string().min(1).default("ai-approved"),
   }),
 });
 

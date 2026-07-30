@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { WorkItem } from "../src/domain.js";
 import { reconcile } from "../src/controller/reconciler.js";
-import { beginRevision, createRunState, currentRevision } from "../src/state/model.js";
+import { beginRevision, createRunState, currentRevision, resumeFromHumanInput } from "../src/state/model.js";
 import { FileRunStateStore } from "../src/state/store.js";
 
 const item: WorkItem = {
@@ -53,5 +53,16 @@ describe("run state", () => {
       { name: "finish", satisfied: (s) => s.status === "completed", run: async (s) => { calls.push("finish"); s.status = "completed"; } },
     ]);
     expect(calls).toEqual(["admit", "finish"]);
+  });
+
+  it("binds human approval to the current implementation revision", () => {
+    const state = createRunState("run-1", "key", item);
+    const revision = beginRevision(state, "sensitive change");
+    state.status = "needs_human";
+    state.currentStage = "human-review";
+    const updated = { ...item, revision: "later", actor: "maintainer", issue: { ...item.issue, labels: [...item.issue.labels, "ai-approved"] } };
+    expect(resumeFromHumanInput(state, updated, "later-key", "ai-approved")).toBe(true);
+    expect(state.humanApprovals).toEqual([{ revision: revision.number, actor: "maintainer", approvedAt: expect.any(String) }]);
+    expect(state.status).toBe("running");
   });
 });

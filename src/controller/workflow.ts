@@ -12,7 +12,7 @@ import type { SCMClient } from "../scm/scm.js";
 import { waitForPipeline } from "../stages/ci.js";
 import { commitAndPublish } from "../stages/publish.js";
 import { requiredGatesPassed, verifyGates } from "../stages/verify.js";
-import { beginRevision, createRunState, currentRevision, type RunState } from "../state/model.js";
+import { beginRevision, createRunState, currentRevision, resumeFromHumanInput, type RunState } from "../state/model.js";
 import type { RunStateStore } from "../state/store.js";
 import { parseDuration } from "../util/duration.js";
 import { configuredSecrets, redactText } from "../security/redact.js";
@@ -30,8 +30,18 @@ export interface WorkflowDependencies {
 export async function executeWorkflow(item: WorkItem, runId: string, key: string, dependencies: WorkflowDependencies): Promise<RunState> {
   const existing = await dependencies.store.load(runId);
   const state = existing ?? createRunState(runId, key, item);
+  state.humanApprovals ??= [];
   try {
     assertActive(dependencies.signal);
+    if (existing && resumeFromHumanInput(state, item, key, dependencies.config.security.human_approval_label)) {
+      state.admission = decideAdmission(item, dependencies.config);
+      if (!state.admission.accepted) {
+        state.status = "rejected";
+        state.terminalReason = state.admission.reason;
+        return await persist(dependencies.store, state);
+      }
+      await persist(dependencies.store, state);
+    }
     if (!state.admission) {
       state.admission = decideAdmission(item, dependencies.config);
       if (!state.admission.accepted) {
@@ -66,6 +76,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       state.currentStage = "plan";
       state.plan = (await dependencies.runtime.plan(buildPlanPrompt(item))).value;
       if (state.plan.requiresHumanInput) {
+        state.currentStage = "plan-human-input";
         state.status = "needs_human";
         state.terminalReason = state.plan.humanQuestions.join("\n");
         await report(dependencies, state);
@@ -100,8 +111,10 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       state.git = checkpoint;
       state.gates = addChangedPathGates(state.gates, dependencies.config, checkpoint.changedFiles);
       const humanReviewPaths = checkpoint.changedFiles.filter((file) => dependencies.config.security.require_human_review.some((pattern) => globMatches(pattern, file)));
-      if (humanReviewPaths.length > 0) {
+      const revisionApproved = state.humanApprovals.some((approval) => approval.revision === revision.number);
+      if (humanReviewPaths.length > 0 && !revisionApproved) {
         state.status = "needs_human";
+        state.currentStage = "human-review";
         state.terminalReason = `human review required for paths: ${humanReviewPaths.join(", ")}`;
         await report(dependencies, state);
         return state;
