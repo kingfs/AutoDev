@@ -45,13 +45,16 @@ agents:
     scheduler:
       enabled: true
       sandbox_policy: new
+      # agent-compose owns scheduler concurrency; AutoDev's repository lease
+      # serializes only workflows that mutate the same repository.
+      concurrency_policy: parallel
       script: |
         async function run(event) {
           return scheduler.shell("node /opt/autodev/dist/src/main.js", {
             env: { AUTODEV_WEBHOOK_EVENT: JSON.stringify(event) },
             timeoutMs: 10800000,
             maxOutputBytes: 1048576,
-            sessionPolicy: "new",
+            sandboxPolicy: "new",
             title: "AutoDev issue workflow"
           });
         }

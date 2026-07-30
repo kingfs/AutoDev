@@ -41,15 +41,17 @@ describe("workflow integration", () => {
     const review: ReviewResult = { approved: true, summary: "approved", acceptanceCoverage: [{ criterion: "file exists", covered: true, evidence: "diff" }], findings: [] };
     const runtime: DevelopmentRuntime = {
       plan: vi.fn().mockResolvedValue({ value: plan, threadId: "p", transcript: "" }),
-      implement: vi.fn().mockImplementation(async () => { await runChecked("bash", ["-lc", "echo implemented > feature.txt"], { cwd: workspace }); return { value: implementation, threadId: "i", transcript: "" }; }),
+      implement: vi.fn().mockImplementation(async () => { await runChecked("bash", ["-lc", "echo broken > feature.txt"], { cwd: workspace }); return { value: implementation, threadId: "i", transcript: "" }; }),
       review: vi.fn().mockResolvedValue({ value: review, threadId: "r", transcript: "" }),
-      repair: vi.fn(),
+      repair: vi.fn().mockImplementation(async () => { await runChecked("bash", ["-lc", "echo implemented > feature.txt"], { cwd: workspace }); return { value: implementation, threadId: "fix", transcript: "" }; }),
     };
     const scm = { commentIssue: vi.fn().mockResolvedValue(undefined) } as unknown as SCMClient;
     const state = await executeWorkflow(item, "run-7", "key", { config, workspace, artifactRoot: path.join(root, "artifacts"), runtime, scm, store: new FileRunStateStore(path.join(root, "state")) });
     expect(state.status, state.terminalReason).toBe("completed");
-    expect(state.revisions).toHaveLength(1);
-    expect(state.revisions[0]?.verification?.passed).toBe(true);
+    expect(state.revisions).toHaveLength(2);
+    expect(state.revisions[0]?.verification?.passed).toBe(false);
+    expect(state.revisions[1]?.verification?.passed).toBe(true);
+    expect(runtime.repair).toHaveBeenCalledOnce();
     expect(scm.commentIssue).toHaveBeenCalledOnce();
   });
 
