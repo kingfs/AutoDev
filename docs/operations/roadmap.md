@@ -7,7 +7,7 @@
 
 Exit criteria: architecture and ADRs reviewed.
 
-## Phase 1: GitLab vertical slice — implemented
+## Phase 1: GitLab vertical slice — coded, live proof pending
 
 - GitLab Issue Hook normalization and admission.
 - Single allowlisted repository and one mutating run at a time.
@@ -21,22 +21,28 @@ Exit criteria: architecture and ADRs reviewed.
 Exit criteria: a fixture and a real test project complete issue-to-draft-MR;
 duplicate delivery creates neither a duplicate branch nor duplicate MR.
 
-## Phase 2: CI closure — implemented, production soak pending
+## Phase 2: CI closure — partially coded
 
 - Exact pushed-SHA GitLab pipeline observation.
 - Failed-job evidence collection and bounded CI repair.
-- Cancellation, restart reconciliation, time budgets, and operator summary.
-- Stronger secret, denied-path, and artifact controls.
+- Exact-SHA polling and finite CI repair budgets are coded.
+- Cancellation propagation, restart reconciliation, end-to-end deadlines, and
+  sanitized artifacts remain AutoDev work.
+- Webhook authentication, sandbox cancellation, and secret storage/injection
+  are agent-compose responsibilities and are configured rather than rebuilt.
 
 Exit criteria: success, failed CI repair, cancellation, and restart paths pass
 integration tests.
 
-## Phase 3: Provider portability — implementation complete, live GitHub smoke pending
+## Phase 3: Provider portability — basic adapters coded
 
 - Provider-neutral SCM domain interface.
-- GitHub Issues, PRs, Actions, signatures, pagination, and rate limits.
-- GitHub App deployment guidance.
-- Repository policy examples for common Go, TypeScript, Python, and monorepos.
+- GitHub Issues, PRs, and basic Actions status are coded.
+- SCM pagination, transient retry/rate-limit handling, richer GitHub Actions
+  evidence, GitHub App guidance, and live smoke tests remain.
+- Webhook signatures are verified by the configured agent-compose webhook
+  source, not by AutoDev.
+- Repository policy examples for common stacks remain.
 
 Exit criteria: the same workflow core runs against GitLab and GitHub fixtures.
 
@@ -49,3 +55,11 @@ Exit criteria: the same workflow core runs against GitLab and GitHub fixtures.
 
 Exit criteria: multiple repositories run from configuration without workflow
 forks and satisfy defined reliability/SLO targets.
+
+## Delivery terminology
+
+- **coded**: an implementation exists and passes focused unit tests;
+- **tested**: boundary and crash/retry integration tests pass;
+- **proven**: a disposable real SCM repository passes the documented scenario;
+- **production-ready**: security boundaries, operations, and SLO evidence are
+  accepted for the intended deployment.

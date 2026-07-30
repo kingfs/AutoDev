@@ -32,6 +32,8 @@ The workflow has two execution planes:
 | Control plane | Webhook validation, policy, Git baseline, commands, gates, push, MR/PR, CI, state |
 
 See [System architecture](docs/architecture/system.md) for the full design.
+See [Responsibility boundary](docs/architecture/responsibility-boundary.md) for
+the explicit division between AutoDev and agent-compose.
 
 ## Intended workflow
 

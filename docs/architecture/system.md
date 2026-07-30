@@ -12,6 +12,11 @@ schedulers, webhook events, sandboxes, Git workspaces, Agent runtime, LLM
 facade, skills, secrets, sessions, and run lifecycle rather than rebuilding
 those facilities.
 
+The exact ownership contract is defined in
+[AutoDev and agent-compose responsibility boundary](responsibility-boundary.md).
+In particular, webhook authentication, secret storage/injection, sandbox
+isolation, and workspace provisioning are platform responsibilities.
+
 ## 2. System boundaries
 
 ```text
@@ -65,9 +70,9 @@ output and are normalized before entering run state.
 
 ### 3.2 Deterministic control plane
 
-Trusted scripts own:
+Trusted AutoDev controller code owns:
 
-- webhook authentication and normalization;
+- normalized-event validation and provider payload normalization;
 - repository and label allowlists;
 - event deduplication and per-repository leases;
 - workspace isolation and Git baseline creation;
@@ -80,9 +85,10 @@ Trusted scripts own:
 - exact-SHA CI lookup and polling;
 - issue comments and final status.
 
-An agent never receives an SCM write token unless a future explicitly reviewed
-capability requires it. The normal design keeps SCM credentials in the control
-plane only.
+agent-compose owns webhook authentication and secret injection. AutoDev must
+not duplicate those mechanisms. The current single-sandbox deployment removes
+SCM variables before child Agent calls, but strict non-access requires a future
+agent-compose-enforced publisher capability or separate privileged sandbox.
 
 ## 4. Main components
 
@@ -293,4 +299,3 @@ Porting AutoDev to a repository should require only:
 - model/provider selection.
 
 Workflow source should not be forked for normal project adoption.
-

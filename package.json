@@ -12,7 +12,7 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node dist/main.js"
+    "start": "node dist/src/main.js"
   },
   "dependencies": {
     "@chaitin-ai/agent-compose-runtime-sdk": "^0.7.0",
