@@ -7,12 +7,16 @@
   "engines": {
     "node": ">=20"
   },
+  "bin": {
+    "autodev-runs": "dist/src/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node dist/src/main.js"
+    "start": "node dist/src/main.js",
+    "runs": "node dist/src/cli.js"
   },
   "dependencies": {
     "@chaitin-ai/agent-compose-runtime-sdk": "^0.7.0",

@@ -16,6 +16,7 @@ import { beginRevision, createRunState, currentRevision, resumeFromHumanInput, t
 import type { RunStateStore } from "../state/store.js";
 import { parseDuration } from "../util/duration.js";
 import { configuredSecrets, redactText } from "../security/redact.js";
+import { emitRunEvent } from "../observability/events.js";
 
 export interface WorkflowDependencies {
   config: AutoDevConfig;
@@ -215,12 +216,12 @@ function assertActive(signal?: AbortSignal): void {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("AutoDev run cancelled");
 }
 
-async function persist(store: RunStateStore, state: RunState): Promise<RunState> { await store.save(state); return state; }
+async function persist(store: RunStateStore, state: RunState): Promise<RunState> { await store.save(state); emitRunEvent(state); return state; }
 async function exhaust(deps: WorkflowDependencies, state: RunState, reason: string): Promise<RunState> { state.status = "budget_exhausted"; state.terminalReason = reason; await report(deps, state); return state; }
 async function report(deps: WorkflowDependencies, state: RunState): Promise<void> {
   const revision = currentRevision(state);
   const summary = [`<!-- autodev:${state.runId} -->`, `AutoDev run **${state.status}**.`, "", state.terminalReason ?? "", state.plan ? `\nPlan: ${state.plan.summary}` : "", revision?.publication ? `\nChange request: ${revision.publication.changeRequest.url}` : ""].filter(Boolean).join("\n");
   await deps.scm.commentIssue(state.workItem, summary);
   state.report = { summary, reportedAt: new Date().toISOString() };
-  await deps.store.save(state);
+  await persist(deps.store, state);
 }
