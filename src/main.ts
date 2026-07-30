@@ -24,17 +24,26 @@ async function main(): Promise<void> {
   const lease = await leases.acquire(`${item.provider}:${item.repository.id}`, runId, parseDuration(config.automation.run_timeout) + 300_000);
   if (!lease) throw new Error(`repository ${item.repository.fullName} already has an active AutoDev run`);
   let state;
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(new Error(`AutoDev run exceeded ${config.automation.run_timeout}`)), parseDuration(config.automation.run_timeout));
+  const terminate = (): void => controller.abort(new Error("AutoDev run cancelled by runtime"));
+  process.once("SIGTERM", terminate);
+  process.once("SIGINT", terminate);
   try {
     state = await executeWorkflow(item, runId, key, {
       config, workspace, artifactRoot: path.join(stateRoot, "artifacts", runId), store,
       runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
       scm: createSCMClient(config),
+      signal: controller.signal,
     });
   } finally {
+    clearTimeout(deadline);
+    process.off("SIGTERM", terminate);
+    process.off("SIGINT", terminate);
     await leases.release(lease);
   }
   console.log(`__AUTODEV_RESULT__${JSON.stringify({ runId, status: state.status, reason: state.terminalReason, report: state.report })}`);
-  if (["failed", "budget_exhausted"].includes(state.status)) process.exitCode = 1;
+  if (["failed", "budget_exhausted", "cancelled"].includes(state.status)) process.exitCode = 1;
 }
 
 function lowerHeaders(headers: Record<string, string>): Record<string, string> { return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])); }

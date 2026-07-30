@@ -13,4 +13,12 @@ describe("CI observation", () => {
     const scm = { findPipeline: vi.fn().mockResolvedValue({ id: "1", sha: "old", status: "success", url: "u" }) } as unknown as SCMClient;
     await expect(waitForPipeline({ scm, repositoryId: "r", sha: "new", timeoutMs: 100, pollIntervalMs: 1 })).rejects.toThrow("unexpected SHA");
   });
+
+  it("honors cancellation from the platform run", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+    const scm = { findPipeline: vi.fn() } as unknown as SCMClient;
+    await expect(waitForPipeline({ scm, repositoryId: "r", sha: "new", timeoutMs: 100, pollIntervalMs: 1, signal: controller.signal })).rejects.toThrow("cancelled");
+    expect(scm.findPipeline).not.toHaveBeenCalled();
+  });
 });

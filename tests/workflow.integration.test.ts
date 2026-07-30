@@ -52,4 +52,22 @@ describe("workflow integration", () => {
     expect(state.revisions[0]?.verification?.passed).toBe(true);
     expect(scm.commentIssue).toHaveBeenCalledOnce();
   });
+
+  it("persists cancellation received from the agent-compose run", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-cancel-"));
+    const config = autoDevConfigSchema.parse({ repository: { provider: "gitlab", url: "https://git.example/group/repo.git" }, automation: {}, verification: {}, security: {} });
+    const item = {
+      provider: "gitlab", deliveryId: "d", actor: "alice", action: "open", revision: "r",
+      repository: { provider: "gitlab", id: "1", fullName: "group/repo", cloneUrl: config.repository.url, webUrl: "https://git.example/group/repo", defaultBranch: "main" },
+      issue: { id: "2", number: 8, title: "Cancel", body: "", labels: ["ai-ready"], author: "alice", url: "", updatedAt: "r" },
+    } as WorkItem;
+    const controller = new AbortController();
+    controller.abort(new Error("platform cancelled"));
+    const scm = { commentIssue: vi.fn().mockResolvedValue(undefined) } as unknown as SCMClient;
+    const runtime = {} as DevelopmentRuntime;
+    const store = new FileRunStateStore(path.join(root, "state"));
+    const state = await executeWorkflow(item, "run-cancel", "key", { config, workspace: root, artifactRoot: path.join(root, "artifacts"), runtime, scm, store, signal: controller.signal });
+    expect(state.status).toBe("cancelled");
+    expect((await store.load("run-cancel"))?.status).toBe("cancelled");
+  });
 });

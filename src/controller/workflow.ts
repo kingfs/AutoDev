@@ -24,12 +24,14 @@ export interface WorkflowDependencies {
   runtime: DevelopmentRuntime;
   scm: SCMClient;
   store: RunStateStore;
+  signal?: AbortSignal;
 }
 
 export async function executeWorkflow(item: WorkItem, runId: string, key: string, dependencies: WorkflowDependencies): Promise<RunState> {
   const existing = await dependencies.store.load(runId);
   const state = existing ?? createRunState(runId, key, item);
   try {
+    assertActive(dependencies.signal);
     if (!state.admission) {
       state.admission = decideAdmission(item, dependencies.config);
       if (!state.admission.accepted) {
@@ -60,6 +62,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
     }
 
     if (!state.plan) {
+      assertActive(dependencies.signal);
       state.currentStage = "plan";
       state.plan = (await dependencies.runtime.plan(buildPlanPrompt(item))).value;
       if (state.plan.requiresHumanInput) {
@@ -84,6 +87,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
     }
 
     while (state.status === "running") {
+      assertActive(dependencies.signal);
       let revision = currentRevision(state);
       if (!revision) {
         state.currentStage = "implement";
@@ -104,6 +108,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       }
 
       if (!revision.verification?.passed) {
+        assertActive(dependencies.signal);
         state.currentStage = "verify";
         const evidence = await verifyGates({ workspace: dependencies.workspace, artifactRoot: path.join(dependencies.artifactRoot, `revision-${revision.number}`), gates: state.gates, checkpoint, config: dependencies.config });
         revision.verification = { passed: requiredGatesPassed(state.gates, evidence), evidence, verifiedAt: new Date().toISOString() };
@@ -120,6 +125,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       }
 
       if (!revision.review?.approved) {
+        assertActive(dependencies.signal);
         state.currentStage = "review";
         const diff = (await runChecked("git", ["diff", state.git.baseSha], { cwd: dependencies.workspace, maxOutputBytes: 500_000 })).stdout;
         revision.review = (await dependencies.runtime.review(buildReviewPrompt(item, state.plan, revision.verification.evidence, diff))).value;
@@ -143,6 +149,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       }
 
       if (!revision.publication) {
+        assertActive(dependencies.signal);
         state.currentStage = "publish";
         revision.publication = { ...(await commitAndPublish({ workspace: dependencies.workspace, item, plan: state.plan, taskBranch: state.git.taskBranch, targetBranch: state.git.baseBranch, scm: dependencies.scm })), publishedAt: new Date().toISOString() };
         await persist(dependencies.store, state);
@@ -157,7 +164,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
 
       if (!revision.ci || revision.ci.pipeline.sha !== revision.publication.pushedSha) {
         state.currentStage = "ci";
-        const observed = await waitForPipeline({ scm: dependencies.scm, repositoryId: item.repository.id, sha: revision.publication.pushedSha, timeoutMs: parseDuration(dependencies.config.automation.ci_timeout) });
+        const observed = await waitForPipeline({ scm: dependencies.scm, repositoryId: item.repository.id, sha: revision.publication.pushedSha, timeoutMs: parseDuration(dependencies.config.automation.ci_timeout), ...(dependencies.signal ? { signal: dependencies.signal } : {}) });
         const secrets = configuredSecrets(dependencies.config.security.agent_redacted_env);
         revision.ci = { ...observed, failures: observed.failures.map((failure) => ({ ...failure, log: redactText(failure.log, secrets) })), observedAt: new Date().toISOString() };
         await persist(dependencies.store, state);
@@ -183,12 +190,16 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
     }
     return state;
   } catch (error) {
-    state.status = "failed";
+    state.status = dependencies.signal?.aborted ? "cancelled" : "failed";
     state.terminalReason = redactText(error instanceof Error ? error.message : String(error), configuredSecrets(dependencies.config.security.agent_redacted_env));
     await persist(dependencies.store, state);
     await report(dependencies, state).catch(() => undefined);
     return state;
   }
+}
+
+function assertActive(signal?: AbortSignal): void {
+  if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("AutoDev run cancelled");
 }
 
 async function persist(store: RunStateStore, state: RunState): Promise<RunState> { await store.save(state); return state; }
