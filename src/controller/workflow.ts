@@ -40,9 +40,21 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
     }
 
     const git = new GitWorkspace(dependencies.workspace);
+    const hadGitState = Boolean(state.git);
     if (!state.git) {
       state.currentStage = "workspace";
       state.git = await git.prepare(item, dependencies.config);
+      await persist(dependencies.store, state);
+    }
+
+    if (hadGitState && state.git) {
+      state.currentStage = "workspace-reconcile";
+      const restored = await git.restore(state.git, dependencies.config);
+      state.git = restored.checkpoint;
+      if (restored.implementationLost && currentRevision(state) && !currentRevision(state)?.publication) {
+        state.revisions = [];
+        state.terminalReason = "unpublished workspace changes were unavailable after restart; implementation will be replayed";
+      }
       await persist(dependencies.store, state);
     }
 

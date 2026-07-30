@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { AutoDevConfig } from "../config/schema.js";
 import type { GitCheckpoint, WorkItem } from "../domain.js";
-import { runChecked } from "./command.js";
+import { runChecked, runCommand } from "./command.js";
 
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 36) || "task";
@@ -31,6 +31,32 @@ export class GitWorkspace {
     const branch = taskBranch(item, config);
     await runChecked("git", ["checkout", "-B", branch, baseSha], { cwd: this.root });
     return { baseBranch: config.repository.default_branch, baseSha, taskBranch: branch, headSha: baseSha, changedFiles: [], clean: true };
+  }
+
+  async restore(checkpoint: GitCheckpoint, config: AutoDevConfig): Promise<{ checkpoint: GitCheckpoint; implementationLost: boolean }> {
+    const remote = await runChecked("git", ["remote", "get-url", "origin"], { cwd: this.root });
+    if (!sameRepository(remote.stdout.trim(), config.repository.url)) {
+      throw new Error(`workspace origin ${remote.stdout.trim()} does not match configured repository`);
+    }
+    const status = await runChecked("git", ["status", "--porcelain"], { cwd: this.root });
+    const branch = (await runChecked("git", ["branch", "--show-current"], { cwd: this.root })).stdout.trim();
+    if (branch === checkpoint.taskBranch) {
+      return { checkpoint: await this.checkpoint(checkpoint), implementationLost: false };
+    }
+    if (status.stdout.trim()) throw new Error(`cannot restore task branch from dirty workspace on ${branch || "detached HEAD"}`);
+
+    await runChecked("git", ["fetch", "--prune", "origin", config.repository.default_branch], { cwd: this.root, timeoutMs: 120_000 });
+    const remoteTask = await runChecked("git", ["ls-remote", "--heads", "origin", `refs/heads/${checkpoint.taskBranch}`], { cwd: this.root });
+    if (remoteTask.stdout.trim()) {
+      await runChecked("git", ["fetch", "origin", `${checkpoint.taskBranch}:refs/remotes/origin/${checkpoint.taskBranch}`], { cwd: this.root, timeoutMs: 120_000 });
+      await runChecked("git", ["checkout", "-B", checkpoint.taskBranch, `refs/remotes/origin/${checkpoint.taskBranch}`], { cwd: this.root });
+      return { checkpoint: await this.checkpoint(checkpoint), implementationLost: false };
+    }
+
+    const baseExists = await runCommand("git", ["cat-file", "-e", `${checkpoint.baseSha}^{commit}`], { cwd: this.root });
+    if (baseExists.exitCode !== 0) throw new Error(`cannot restore unavailable base commit ${checkpoint.baseSha}`);
+    await runChecked("git", ["checkout", "-B", checkpoint.taskBranch, checkpoint.baseSha], { cwd: this.root });
+    return { checkpoint: await this.checkpoint(checkpoint), implementationLost: true };
   }
 
   async checkpoint(base: Pick<GitCheckpoint, "baseBranch" | "baseSha" | "taskBranch">): Promise<GitCheckpoint> {

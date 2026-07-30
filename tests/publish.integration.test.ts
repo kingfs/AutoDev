@@ -25,10 +25,19 @@ describe("trusted publication", () => {
     const item = { repository: { id: "1" }, issue: { number: 1, title: "Feature" } } as WorkItem;
     const plan = { changeRequest: { title: "Feature", description: "Description", draft: true } } as PlanResult;
     const created = { id: "1", number: 2, url: "https://git/mr/2", sourceBranch: "ai/issue-1", targetBranch: "main", state: "open", draft: true } as const;
-    const scm = { findChangeRequest: vi.fn().mockResolvedValue(null), createChangeRequest: vi.fn().mockResolvedValue(created) } as unknown as SCMClient;
+    const scm = {
+      findChangeRequest: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(created),
+      createChangeRequest: vi.fn().mockResolvedValue(created),
+      updateChangeRequest: vi.fn().mockResolvedValue(created),
+    } as unknown as SCMClient;
     const result = await commitAndPublish({ workspace, item, plan, taskBranch: "ai/issue-1", targetBranch: "main", scm });
     expect(result.changeRequest.url).toBe("https://git/mr/2");
     expect((await runChecked("git", ["ls-remote", "--heads", "origin", "ai/issue-1"], { cwd: workspace })).stdout).toContain(result.pushedSha);
     expect(scm.createChangeRequest).toHaveBeenCalledOnce();
+
+    const resumed = await commitAndPublish({ workspace, item, plan, taskBranch: "ai/issue-1", targetBranch: "main", scm });
+    expect(resumed.pushedSha).toBe(result.pushedSha);
+    expect(scm.createChangeRequest).toHaveBeenCalledOnce();
+    expect(scm.updateChangeRequest).toHaveBeenCalledOnce();
   });
 });
