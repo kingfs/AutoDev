@@ -263,6 +263,7 @@ agent-compose logs
 
 ```bash
 export AGENT_COMPOSE_HTTP_URL=http://127.0.0.1:7410
+export AGENT_COMPOSE_TOKEN='<agent-compose token>'
 export SCM_PROVIDER=gitlab       # 或 github
 export AUTODEV_WEBHOOK_TOKEN='<使用密码生成器生成的随机值>'
 ./scripts/register-webhook.sh
