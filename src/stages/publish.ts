@@ -6,6 +6,7 @@ export async function commitAndPublish(options: {
   workspace: string;
   item: WorkItem;
   plan: PlanResult;
+  draft: boolean;
   taskBranch: string;
   targetBranch: string;
   scm: SCMClient;
@@ -31,7 +32,7 @@ export async function commitAndPublish(options: {
     pushArgs.push("origin", `${options.taskBranch}:${options.taskBranch}`);
     await runChecked("git", pushArgs, { cwd: options.workspace, timeoutMs: 180_000 });
   }
-  const input = { repositoryId: options.item.repository.id, sourceBranch: options.taskBranch, targetBranch: options.targetBranch, title: options.plan.changeRequest.title, description: `${options.plan.changeRequest.description}\n\nCloses #${options.item.issue.number}`, draft: options.plan.changeRequest.draft, issueNumber: options.item.issue.number };
+  const input = { repositoryId: options.item.repository.id, sourceBranch: options.taskBranch, targetBranch: options.targetBranch, title: options.plan.changeRequest.title, description: `${options.plan.changeRequest.description}\n\nCloses #${options.item.issue.number}`, draft: options.draft, issueNumber: options.item.issue.number };
   const existing = await options.scm.findChangeRequest(input);
   const changeRequest = existing ? await options.scm.updateChangeRequest(existing, input) : await options.scm.createChangeRequest(input);
   return { pushedSha, changeRequest };

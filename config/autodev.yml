@@ -12,7 +12,7 @@ automation:
   local_repair_limit: 2
   ci_repair_limit: 2
   run_timeout: 3h
-  agent_provider: codex
+  agent_provider: opencode
   ci_watch: true
   ci_timeout: 1h
 

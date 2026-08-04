@@ -165,7 +165,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       if (!revision.publication) {
         assertActive(dependencies.signal);
         state.currentStage = "publish";
-        revision.publication = { ...(await commitAndPublish({ workspace: dependencies.workspace, item, plan: state.plan, taskBranch: state.git.taskBranch, targetBranch: state.git.baseBranch, scm: dependencies.scm })), publishedAt: new Date().toISOString() };
+        revision.publication = { ...(await commitAndPublish({ workspace: dependencies.workspace, item, plan: state.plan, draft: state.admission.mode === "draft", taskBranch: state.git.taskBranch, targetBranch: state.git.baseBranch, scm: dependencies.scm })), publishedAt: new Date().toISOString() };
         await persist(dependencies.store, state);
       }
 

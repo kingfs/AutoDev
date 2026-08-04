@@ -14,7 +14,7 @@ volumes:
 
 agents:
   workflow:
-    provider: codex
+    provider: opencode
     build:
       context: .
       dockerfile: Dockerfile
