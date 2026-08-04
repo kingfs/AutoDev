@@ -5,7 +5,7 @@ RUN npm ci
 COPY src ./src
 RUN npm run build
 
-FROM autodev-guest:20260804-luna1
+FROM chaitin/agent-compose-guest:latest
 USER root
 WORKDIR /opt/autodev
 COPY --from=build /opt/autodev/package.json /opt/autodev/package-lock.json ./

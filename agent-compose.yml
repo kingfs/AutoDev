@@ -14,14 +14,13 @@ volumes:
 
 agents:
   workflow:
-    provider: codex
-    model: feature/gpt-5.6-luna
+    provider: opencode
     build:
       context: .
       dockerfile: Dockerfile
       tags:
-        - autodev-guest:20260804-responses2
-    image: autodev-guest:20260804-responses2
+        - autodev-guest:latest
+    image: autodev-guest:latest
     driver:
       docker: {}
     workspace:
