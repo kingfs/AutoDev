@@ -19,8 +19,8 @@ agents:
       context: .
       dockerfile: Dockerfile
       tags:
-        - autodev-guest:20260804-luna1
-    image: autodev-guest:20260804-luna1
+        - autodev-guest:20260804-responses2
+    image: autodev-guest:20260804-responses2
     driver:
       docker: {}
     workspace:
