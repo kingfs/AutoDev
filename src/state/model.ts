@@ -119,3 +119,14 @@ export function resumeFromHumanInput(state: RunState, item: WorkItem, idempotenc
   state.currentStage = "intake-resume";
   return true;
 }
+
+export function replayFailedRun(state: RunState, item: WorkItem, idempotencyKey: string): boolean {
+  if (!["failed", "cancelled"].includes(state.status) || state.workItem.revision === item.revision) return false;
+  state.workItem = item;
+  state.idempotencyKey = idempotencyKey;
+  state.status = "running";
+  state.currentStage = "intake-replay";
+  delete state.terminalReason;
+  delete state.report;
+  return true;
+}

@@ -12,4 +12,5 @@ COPY --from=build /opt/autodev/package.json /opt/autodev/package-lock.json ./
 COPY --from=build /opt/autodev/node_modules ./node_modules
 COPY --from=build /opt/autodev/dist ./dist
 COPY config ./config
+COPY scripts/run-webhook.sh ./scripts/run-webhook.sh
 ENTRYPOINT []

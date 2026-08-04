@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { WorkItem } from "../src/domain.js";
 import { reconcile } from "../src/controller/reconciler.js";
-import { beginRevision, createRunState, currentRevision, resumeFromHumanInput } from "../src/state/model.js";
+import { beginRevision, createRunState, currentRevision, replayFailedRun, resumeFromHumanInput } from "../src/state/model.js";
 import { FileRunStateStore } from "../src/state/store.js";
 
 const item: WorkItem = {
@@ -64,5 +64,20 @@ describe("run state", () => {
     expect(resumeFromHumanInput(state, updated, "later-key", "ai-approved")).toBe(true);
     expect(state.humanApprovals).toEqual([{ revision: revision.number, actor: "maintainer", approvedAt: expect.any(String) }]);
     expect(state.status).toBe("running");
+  });
+
+  it("replays a failed run only after a newer work item revision", () => {
+    const state = createRunState("run-1", "key", item);
+    state.status = "failed";
+    state.currentStage = "plan";
+    state.terminalReason = "provider failed";
+    state.report = { summary: "failed", reportedAt: new Date().toISOString() };
+
+    expect(replayFailedRun(state, item, "same-key")).toBe(false);
+    const updated = { ...item, revision: "later", issue: { ...item.issue, updatedAt: "later" } };
+    expect(replayFailedRun(state, updated, "later-key")).toBe(true);
+    expect(state).toMatchObject({ status: "running", currentStage: "intake-replay", idempotencyKey: "later-key", workItem: updated });
+    expect(state.terminalReason).toBeUndefined();
+    expect(state.report).toBeUndefined();
   });
 });

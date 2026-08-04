@@ -12,7 +12,7 @@ import type { SCMClient } from "../scm/scm.js";
 import { waitForPipeline } from "../stages/ci.js";
 import { commitAndPublish } from "../stages/publish.js";
 import { requiredGatesPassed, verifyGates } from "../stages/verify.js";
-import { beginRevision, createRunState, currentRevision, resumeFromHumanInput, type RunState } from "../state/model.js";
+import { beginRevision, createRunState, currentRevision, replayFailedRun, resumeFromHumanInput, type RunState } from "../state/model.js";
 import type { RunStateStore } from "../state/store.js";
 import { parseDuration } from "../util/duration.js";
 import { configuredSecrets, redactText } from "../security/redact.js";
@@ -43,6 +43,7 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       }
       await persist(dependencies.store, state);
     }
+    if (existing && replayFailedRun(state, item, key)) await persist(dependencies.store, state);
     if (!state.admission) {
       state.admission = decideAdmission(item, dependencies.config);
       if (!state.admission.accepted) {
