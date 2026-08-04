@@ -32,8 +32,7 @@ function parseExplicitJson(text: string): unknown {
   return JSON.parse(fenced?.[1] ?? trimmed);
 }
 
-<<<<<<< ours
-function structuredPrompt(prompt: string, schema: ZodType, retry: boolean, workspaceTools = false): string {
+function structuredPrompt(prompt: string, schema: ZodType, retry: boolean, workspaceTools: boolean): string {
   const lines = [
     prompt,
     "",
@@ -48,7 +47,6 @@ function structuredPrompt(prompt: string, schema: ZodType, retry: boolean, works
       "Do not print a proposed tool call or claim the tool is unavailable without first making the real bash tool call.",
     );
   }
-  return lines.join("\n");
   return lines.join("\n");
 }
 
@@ -137,7 +135,6 @@ export class AgentComposeRuntime implements DevelopmentRuntime {
         } else {
           result = await runtime.agent(structuredPrompt(prompt, schema, false, false), options);
         }
-        result = await runtime.agent(structuredPrompt(prompt, schema, false, false), options);
       } else try {
         result = await runtime.agent(prompt, { ...options, outputSchema: schema });
       } catch (error) {
