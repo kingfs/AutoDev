@@ -3,8 +3,8 @@ name: autodev
 workspaces:
   target:
     provider: git
-    url: ${SCM_REPOSITORY_URL}
-    ref: ${SCM_DEFAULT_BRANCH}
+    url: https://git.in.chaitin.net/yongzhen.wang/agent-compose-sample.git
+    ref: master
     target: .
     token: ${SCM_GIT_TOKEN}
 
@@ -15,22 +15,19 @@ volumes:
 agents:
   workflow:
     provider: opencode
+    model: feature/gpt-5.6-luna
     build:
       context: .
       dockerfile: Dockerfile
       tags:
-        - autodev-guest:latest
-    image: autodev-guest:latest
+        - autodev-guest:20260804-opencode9
+    image: autodev-guest:20260804-opencode9
     driver:
       docker: {}
     workspace:
       name: target
     volumes:
       - state:/state
-      - type: bind
-        source: ./config/autodev.yml
-        target: /etc/autodev/config.yml
-        read_only: true
     env:
       SCM_REPOSITORY_URL: ${SCM_REPOSITORY_URL}
       SCM_PROVIDER: ${SCM_PROVIDER}
@@ -40,7 +37,10 @@ agents:
       SCM_API_TOKEN:
         value: ${SCM_API_TOKEN}
         secret: true
-      AUTODEV_CONFIG: /etc/autodev/config.yml
+      SCM_GIT_TOKEN:
+        value: ${SCM_GIT_TOKEN}
+        secret: true
+      AUTODEV_CONFIG: /opt/autodev/config/autodev.yml
       AUTODEV_WORKSPACE: /workspace
       AUTODEV_STATE_ROOT: /state
     scheduler:
@@ -51,7 +51,7 @@ agents:
       concurrency_policy: skip
       script: |
         async function run(event) {
-          return scheduler.shell("node /opt/autodev/dist/src/main.js", {
+          return scheduler.shell("/opt/autodev/scripts/run-webhook.sh", {
             env: { AUTODEV_WEBHOOK_EVENT: JSON.stringify(event) },
             timeoutMs: 10800000,
             maxOutputBytes: 1048576,
