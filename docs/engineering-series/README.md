@@ -15,6 +15,10 @@
 
 ## 阅读地图
 
+如果希望一次读完整个故事，可以直接阅读
+[《当 Agent 开始接手一个项目：AutoDev 的复杂工程实验》](forum-edition.md)。这是为公司
+论坛整理的单篇合刊版，保留全部插图，并压缩了十篇之间重复的背景说明。
+
 1. [当一个 Agent 不再是一段脚本](01-from-agent-to-system.md)  
    从简单示例跨进复杂工程，先把平台和业务边界画清楚。
 2. [让 Agent 负责思考，让程序负责拍板](02-two-planes.md)  
@@ -44,4 +48,3 @@
 这里的图用于解释职责、状态和证据流向。真正部署时，请以项目的
 [README](../../README.md)、[工作流契约](../architecture/workflow.md)和
 [职责边界](../architecture/responsibility-boundary.md)为准。
-

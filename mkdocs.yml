@@ -41,6 +41,7 @@ nav:
       - 路线图: operations/roadmap.md
   - 工程连载:
       - 连载导读: engineering-series/index.md
+      - 论坛合刊版: engineering-series/forum-edition.md
       - 01 · 从 Agent 到系统: engineering-series/01-from-agent-to-system.md
       - 02 · 两个执行平面: engineering-series/02-two-planes.md
       - 03 · 持久工作流: engineering-series/03-durable-workflow.md

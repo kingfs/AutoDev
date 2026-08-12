@@ -17,6 +17,8 @@ cp -R "${repo_root}/docs/engineering-series/assets" \
   "${source_dir}/engineering-series/assets"
 cp "${repo_root}/docs/engineering-series/"[0-9][0-9]-*.md \
   "${source_dir}/engineering-series/"
+cp "${repo_root}/docs/engineering-series/forum-edition.md" \
+  "${source_dir}/engineering-series/"
 cp "${repo_root}/docs/engineering-series/README.md" \
   "${source_dir}/engineering-series/index.md"
 cp "${repo_root}/docs/assets/site.css" \
