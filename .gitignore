@@ -1,9 +1,10 @@
 .env
 node_modules/
 dist/
+.docs-site/
+site/
 coverage/
 .cache/
 runs/
 artifacts/
 *.log
-

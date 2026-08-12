@@ -1,5 +1,8 @@
 # AutoDev
 
+> 文档站会在 GitHub Release 发布时自动更新。工程设计、运维指南与故事连载均由
+> 仓库中的 Markdown 构建，参见 [文档导航](docs/engineering-series/README.md)。
+
 AutoDev 是一个基于策略驱动的 AI 自动化开发系统。它接收 GitHub 或
 GitLab Issue，通过 AI Agent 完成需求分析、代码实现、语义审查和失败修复，
 再由确定性控制程序执行质量门禁、Git 提交、分支推送、MR/PR 创建、CI 观察
