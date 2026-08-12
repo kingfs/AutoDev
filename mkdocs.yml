@@ -1,0 +1,53 @@
+site_name: AutoDev 文档
+site_description: 基于 agent-compose 的策略驱动 AI 自动化开发系统
+site_url: http://yongzhen.wang/AutoDev/
+repo_url: https://github.com/kingfs/AutoDev
+repo_name: kingfs/AutoDev
+
+docs_dir: .docs-site
+site_dir: site
+use_directory_urls: true
+strict: true
+
+theme:
+  name: mkdocs
+  locale: zh_CN
+  navigation_depth: 3
+  nav_style: primary
+  highlightjs: true
+
+extra_css:
+  - stylesheets/site.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - 首页: index.md
+  - 架构:
+      - 系统架构: architecture/system.md
+      - 工作流契约: architecture/workflow.md
+      - 职责边界: architecture/responsibility-boundary.md
+  - 运维与采用:
+      - 采用路径: operations/adoption.md
+      - 策略示例: operations/policy-examples.md
+      - GitHub App: operations/github-app.md
+      - 安全: operations/security.md
+      - 运行检查: operations/run-inspection.md
+      - 路线图: operations/roadmap.md
+  - 工程连载:
+      - 连载导读: engineering-series/index.md
+      - 01 · 从 Agent 到系统: engineering-series/01-from-agent-to-system.md
+      - 02 · 两个执行平面: engineering-series/02-two-planes.md
+      - 03 · 持久工作流: engineering-series/03-durable-workflow.md
+      - 04 · 事件入口: engineering-series/04-event-ingress.md
+      - 05 · 安全工作区: engineering-series/05-safe-workspace.md
+      - 06 · 策略与门禁: engineering-series/06-policy-and-gates.md
+      - 07 · 发布与 CI: engineering-series/07-publish-and-ci.md
+      - 08 · Runtime Image: engineering-series/08-runtime-image.md
+      - 09 · 可观测性与测试: engineering-series/09-observability-and-testing.md
+      - 10 · 工程方法论: engineering-series/10-methodology.md
