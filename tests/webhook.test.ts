@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeWebhook } from "../src/scm/webhook.js";
-import { normalizeGitLabCommandEvent, parseAutoDevCommand } from "../src/scm/gitlab-events.js";
+import { gitLabEventKind, normalizeGitLabCommandEvent, parseAutoDevCommand } from "../src/scm/gitlab-events.js";
 
 describe("webhook normalization", () => {
   it("normalizes a GitLab issue hook", () => {
@@ -54,5 +54,15 @@ describe("GitLab command events", () => {
       object_kind: "merge_request", user: { id: 7, username: "alice" },
       project: { id: 1, path_with_namespace: "group/repo" }, object_attributes: { iid: 4 },
     }, {})).toMatchObject({ eventKind: "merge_request", target: { kind: "merge_request", iid: 4 } });
+  });
+
+  it("does not normalize bot note updates as new commands", () => {
+    expect(normalizeGitLabCommandEvent({ object_kind: "note", user: { id: 99, username: "bot" }, project: { id: 1, path_with_namespace: "group/repo" }, object_attributes: { action: "update", noteable_type: "MergeRequest", id: 3, note: "@autodev review" }, merge_request: { iid: 4 } }, {})).toBeNull();
+  });
+
+  it("classifies non-Issue GitLab events before workflow fallback", () => {
+    expect(gitLabEventKind({ object_kind: "push" })).toBe("push");
+    expect(gitLabEventKind({ object_kind: "note" })).toBe("note");
+    expect(gitLabEventKind({ object_kind: "issue" })).toBe("issue");
   });
 });

@@ -56,5 +56,10 @@ export function parseAutoDevCommand(note: string): AutoDevCommand | null {
   return ["help", "status", "analyze", "run", "retry", "review"].includes(command) ? command as AutoDevCommand : "help";
 }
 
+export function gitLabEventKind(body: unknown): string {
+  const value = object(body);
+  return String(value.object_kind ?? value.event_type ?? "").toLowerCase();
+}
+
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24); }
