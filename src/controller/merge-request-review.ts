@@ -20,7 +20,10 @@ export async function reviewMergeRequest(mr: GitLabTargetSnapshot, dependencies:
   const gates = materializeMergeRequestGates(dependencies.config, checkpoint.changedFiles);
   const evidence = await verifyGates({ workspace: dependencies.workspace, artifactRoot: path.join(dependencies.artifactRoot, mr.headSha), gates, checkpoint, config: dependencies.config });
   const currentHead = (await runChecked("git", ["rev-parse", "HEAD"], { cwd: dependencies.workspace })).stdout.trim();
-  const worktree = (await runChecked("git", ["status", "--porcelain"], { cwd: dependencies.workspace })).stdout.trim();
+  // Verification tools may create untracked dependency/build caches in the
+  // sandbox. Integrity is about preserving the reviewed tracked source; reject
+  // staged or unstaged tracked-file mutations without treating caches as code.
+  const worktree = (await runChecked("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: dependencies.workspace })).stdout.trim();
   const integrityPassed = currentHead === mr.headSha && worktree.length === 0;
   gates.push({ id: "review-integrity", type: "review", description: "Verification commands preserve the reviewed SHA and worktree.", required: true, source: "global" });
   evidence.push({ gateId: "review-integrity", passed: integrityPassed, summary: integrityPassed ? "reviewed SHA and worktree remained unchanged" : `verification mutated review workspace (head=${currentHead}, dirty=${Boolean(worktree)})` });
