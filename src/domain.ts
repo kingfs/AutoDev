@@ -95,6 +95,7 @@ export interface QualityGate {
   required: boolean;
   command?: string;
   cwd?: string;
+  timeout?: string;
   source: "global" | "repository" | "plan" | "changed-path";
 }
 

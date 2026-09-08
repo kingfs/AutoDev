@@ -35,6 +35,7 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
   const targetKey = `gitlab:${event.project.id}:${event.target.kind}:${event.target.iid}`;
   const invocationId = `${event.noteId ?? event.deliveryId}:${command}`;
   const marker = `<!-- autodev-command:${event.noteId ?? event.deliveryId} -->`;
+  const operationMarker = `<!-- autodev-operation:${event.target.kind}:${event.target.iid}:${command} -->`;
 
   if (command === "help") {
     await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\nAutoDev 可用命令：\n\n- \`@autodev help\`\n- \`@autodev status\`\n- \`@autodev analyze\`（只读分析，不修改代码）\n- \`@autodev run\`（仅 Issue，分析通过后实现）\n- \`@autodev retry\`（仅 Issue，重试终态任务）\n- \`@autodev review\`（仅 MR，审查当前精确 SHA）`);
@@ -57,15 +58,18 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
     const updatedAt = target.updatedAt ?? new Date().toISOString();
     const item: WorkItem = { provider: "gitlab", deliveryId: event.deliveryId, actor: event.actor.username, action: "open", revision: updatedAt, repository: { provider: "gitlab", id: event.project.id, fullName: event.project.fullName, cloneUrl: dependencies.config.repository.url, webUrl: target.webUrl, defaultBranch: dependencies.config.repository.default_branch }, issue: { id: String(target.iid), number: target.iid, title: target.title, body: target.description, labels: target.labels, author: target.author ?? event.actor.username, url: target.webUrl, updatedAt } };
     await dependencies.store.startInvocation(targetKey, invocationId, command, event.actor.username);
+    await dependencies.scm.commentTarget(event.project.id, "issue", event.target.iid, operationStatus(operationMarker, command, "running", `已读取 Issue #${target.iid}，正在进行事实分析、实现和门禁验证。`));
     let result;
     try {
       result = await dependencies.runIssue(item, command === "retry");
       await dependencies.store.finishInvocation(targetKey, invocationId, "completed", `${result.status}: ${result.reason ?? ""}`);
     } catch (error) {
-      await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
+      const message = errorMessage(error);
+      await dependencies.store.finishInvocation(targetKey, invocationId, "failed", message);
+      await reportOperationFailure(dependencies.scm, event.project.id, "issue", event.target.iid, operationMarker, command, message);
       throw error;
     }
-    await dependencies.scm.commentTarget(event.project.id, "issue", event.target.iid, `${marker}\nAutoDev ${command} 结果：**${result.status}**\n\n${result.reason ?? ""}`);
+    await dependencies.scm.commentTarget(event.project.id, "issue", event.target.iid, operationStatus(operationMarker, command, "completed", `结果：**${result.status}**\n\n${result.reason ?? ""}`));
     return { status: "completed", reason: `${command} dispatched` };
   }
 
@@ -77,31 +81,49 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
     const current = await dependencies.store.loadTarget(targetKey);
     if (event.eventKind === "merge_request" && current?.invocations.some((entry) => entry.command === "review" && entry.revision === mr.headSha && entry.attempts.at(-1)?.status === "completed")) return { status: "ignored", reason: "merge request revision already reviewed" };
     await dependencies.store.startInvocation(targetKey, invocationId, "review", event.actor.username, mr.headSha);
+    await dependencies.scm.commentTarget(event.project.id, "merge_request", event.target.iid, operationStatus(operationMarker, "review", "running", `正在审查 MR !${mr.iid} 的精确 SHA \`${mr.headSha}\`，包括确定性门禁和语义审查。`));
     let result;
     try {
       result = await dependencies.reviewMergeRequest(mr, current?.reviewFindings ?? []);
       await dependencies.store.saveReviewFindings(targetKey, result.findings);
       await dependencies.store.finishInvocation(targetKey, invocationId, "completed", result.summary);
     } catch (error) {
-      await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
+      const message = errorMessage(error);
+      await dependencies.store.finishInvocation(targetKey, invocationId, "failed", message);
+      await reportOperationFailure(dependencies.scm, event.project.id, "merge_request", event.target.iid, operationMarker, "review", message);
       throw error;
     }
+    await dependencies.scm.commentTarget(event.project.id, "merge_request", event.target.iid, operationStatus(operationMarker, "review", "completed", `已完成 SHA \`${result.revision}\` 的审查，结论：**${result.status}**。\n\n${result.summary}`));
     return { status: "completed", reason: `review ${result.status}` };
   }
 
   await dependencies.store.startInvocation(targetKey, invocationId, "analyze", event.actor.username);
+  await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, operationStatus(operationMarker, "analyze", "running", "已读取目标对象，正在基于仓库代码事实进行只读分析。"));
   try {
     const target = await dependencies.scm.target(event.project.id, event.target.kind, event.target.iid);
     const analysis = (await dependencies.runtime.analyze(buildAnalysisPrompt(target))).value;
     const summary = formatAnalysis(analysis, decideAnalysisAdmission(analysis).verdict);
     await dependencies.store.finishInvocation(targetKey, invocationId, "completed", analysis.summary);
-    await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\n${summary}`);
+    await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${operationMarker}\n${summary}`);
     return { status: "completed", reason: "analysis replied" };
   } catch (error) {
-    await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
+    const message = errorMessage(error);
+    await dependencies.store.finishInvocation(targetKey, invocationId, "failed", message);
+    await reportOperationFailure(dependencies.scm, event.project.id, event.target.kind, event.target.iid, operationMarker, "analyze", message);
     throw error;
   }
 }
+
+function operationStatus(marker: string, command: string, status: "running" | "completed" | "failed", detail: string): string {
+  const labels = { running: "⏳ 工作中", completed: "✅ 已完成", failed: "❌ 执行失败" } as const;
+  return [marker, `## AutoDev ${command}`, "", `状态：**${labels[status]}**`, "", detail, "", `更新时间：${new Date().toISOString()}`, ...(status === "failed" ? ["", "> 可以在排除原因后使用对应命令重新触发；MR 使用 `@autodev review`。"] : [])].join("\n");
+}
+
+async function reportOperationFailure(scm: GitLabClient, projectId: string, kind: "issue" | "merge_request", iid: number, marker: string, command: string, message: string): Promise<void> {
+  try { await scm.commentTarget(projectId, kind, iid, operationStatus(marker, command, "failed", `失败原因：${message.slice(0, 2_000)}`)); } catch { /* Preserve the workflow error when status reporting also fails. */ }
+}
+
+function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 
 function formatAnalysis(value: Awaited<ReturnType<DevelopmentRuntime["analyze"]>>["value"], verdict: "proceed" | "needs_human" | "reject"): string {
   const evidence = value.codeEvidence.length ? value.codeEvidence.map((item) => `- \`${item.path}\`${item.symbol ? ` · \`${item.symbol}\`` : ""}: ${item.evidence}`).join("\n") : "- 暂无充分的代码证据";

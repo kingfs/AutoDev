@@ -10,14 +10,14 @@ export function materializeGates(config: AutoDevConfig, plan: PlanResult): Quali
     { id: "secret-scan", type: "security", description: "The change does not contain credential material.", required: true, source: "global" },
   ];
   for (const check of config.verification.commands) {
-    gates.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), source: "repository" });
+    gates.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), ...(check.timeout ? { timeout: check.timeout } : {}), source: "repository" });
   }
   const expected = new Set(plan.expectedChangedPaths.flatMap((name) => name ? [name] : []));
   for (const rule of config.verification.path_rules) {
     if (![...expected].some((filename) => globMatches(rule.pattern, filename))) continue;
     for (const check of rule.commands) {
       if (gates.some((gate) => gate.id === check.id)) continue;
-      gates.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), source: "plan" });
+      gates.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), ...(check.timeout ? { timeout: check.timeout } : {}), source: "plan" });
     }
   }
   return gates;
@@ -29,7 +29,7 @@ export function addChangedPathGates(gates: QualityGate[], config: AutoDevConfig,
     if (!changedFiles.some((filename) => globMatches(rule.pattern, filename))) continue;
     for (const check of rule.commands) {
       if (result.some((gate) => gate.id === check.id)) continue;
-      result.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), source: "changed-path" });
+      result.push({ id: check.id, type: "command", description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), ...(check.timeout ? { timeout: check.timeout } : {}), source: "changed-path" });
     }
   }
   return result;
@@ -41,7 +41,7 @@ export function materializeMergeRequestGates(config: AutoDevConfig, changedFiles
     { id: "denied-paths", type: "path", description: "No denied path is changed.", required: true, source: "global" },
     { id: "change-limits", type: "security", description: "The MR stays within configured limits.", required: true, source: "global" },
     { id: "secret-scan", type: "security", description: "The MR contains no credential material.", required: true, source: "global" },
-    ...config.verification.commands.map((check) => ({ id: check.id, type: "command" as const, description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), source: "repository" as const })),
+    ...config.verification.commands.map((check) => ({ id: check.id, type: "command" as const, description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), ...(check.timeout ? { timeout: check.timeout } : {}), source: "repository" as const })),
   ];
   return addChangedPathGates(gates, config, changedFiles);
 }

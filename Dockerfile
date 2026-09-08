@@ -5,9 +5,14 @@ RUN npm ci
 COPY src ./src
 RUN npm run build
 
+FROM golang:1.26.4-bookworm AS go-toolchain
+
 FROM autodev-guest:20260804-luna1
 USER root
 WORKDIR /opt/autodev
+COPY --from=go-toolchain /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}"
+RUN npm install --global pnpm@10.15.1
 COPY --from=build /opt/autodev/package.json /opt/autodev/package-lock.json ./
 COPY --from=build /opt/autodev/node_modules ./node_modules
 COPY --from=build /opt/autodev/dist ./dist

@@ -51,13 +51,17 @@ agents:
       concurrency_policy: skip
       script: |
         async function run(event) {
-          return scheduler.shell("/opt/autodev/scripts/run-webhook.sh", {
+          const result = scheduler.shell("/opt/autodev/scripts/run-webhook.sh", {
             env: { AUTODEV_WEBHOOK_EVENT: JSON.stringify(event) },
             timeoutMs: 10800000,
             maxOutputBytes: 1048576,
             sandboxPolicy: "new",
-            title: "AutoDev issue workflow"
+            title: "AutoDev repository workflow"
           });
+          if (!result.success) {
+            throw new Error(`AutoDev workflow failed with exit code ${result.exitCode}: ${result.stderr || result.output}`);
+          }
+          return result;
         }
         scheduler.on("webhook.gitlab.issue", "gitlab-issue", run);
         scheduler.on("webhook.gitlab.note", "gitlab-note", run);

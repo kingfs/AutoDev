@@ -52,6 +52,8 @@
 
 ## M5：真实仓库验收与运维
 
+- 验收准备：后台命令先发布可见的 running 评论，再原位更新为 completed/failed；scheduler 必须传播沙箱失败；
+- 验收准备：运行镜像提供目标仓库所需的 Go/pnpm 工具链，并按变更路径执行基础门禁；
 - 为 Issue 分析、Issue 实现、MR 审查分别建立真实 GitLab smoke test；
 - 指标：响应延迟、重复率、拒绝准确性、finding 修复确认率、误报/漏报；
 - 状态和 artifact 清理、成本预算、权限轮换和故障恢复；

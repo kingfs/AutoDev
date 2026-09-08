@@ -5,6 +5,7 @@ import type { GateEvidence, GitCheckpoint, QualityGate } from "../domain.js";
 import { runCommand } from "../git/command.js";
 import { globMatches } from "../policies/glob.js";
 import { configuredSecrets, containsSecret, redactText } from "../security/redact.js";
+import { parseDuration } from "../util/duration.js";
 
 export async function verifyGates(options: {
   workspace: string;
@@ -33,7 +34,7 @@ export async function verifyGates(options: {
       continue;
     }
     if (gate.type === "command" && gate.command) {
-      const result = await runCommand("bash", ["-lc", gate.command], { cwd: path.resolve(options.workspace, gate.cwd ?? "."), timeoutMs: 30 * 60_000 });
+      const result = await runCommand("bash", ["-lc", gate.command], { cwd: path.resolve(options.workspace, gate.cwd ?? "."), timeoutMs: gate.timeout ? parseDuration(gate.timeout) : 30 * 60_000 });
       const artifact = path.join(options.artifactRoot, `${gate.id}.log`);
       await writeFile(artifact, redactText([`$ ${gate.command}`, result.stdout, result.stderr].join("\n"), secrets), { mode: 0o600 });
       evidence.push({ gateId: gate.id, passed: result.exitCode === 0, summary: result.exitCode === 0 ? "command passed" : `command failed with exit code ${result.exitCode}`, command: gate.command, exitCode: result.exitCode, durationMs: result.durationMs, artifact });

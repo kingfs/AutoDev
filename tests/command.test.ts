@@ -64,6 +64,8 @@ describe("GitLab command controller", () => {
     expect(deps.runIssue).toHaveBeenCalledWith(expect.objectContaining({ issue: expect.objectContaining({ author: "reporter", labels: ["ai-ready"] }) }), false);
     expect(deps.store.startInvocation).toHaveBeenCalledWith("gitlab:1:issue:3", "9:run", "run", "alice");
     expect(deps.store.finishInvocation).toHaveBeenCalledWith("gitlab:1:issue:3", "9:run", "completed", "completed: done");
+    expect(deps.scm.commentTarget).toHaveBeenNthCalledWith(1, "1", "issue", 3, expect.stringContaining("状态：**⏳ 工作中**"));
+    expect(deps.scm.commentTarget).toHaveBeenLastCalledWith("1", "issue", 3, expect.stringContaining("状态：**✅ 已完成**"));
   });
 
   it("marks retry as an explicit workflow retry", async () => {
@@ -93,6 +95,17 @@ describe("GitLab command controller", () => {
     await executeGitLabCommand(reviewEvent, { ...deps, reviewMergeRequest });
     await executeGitLabCommand({ ...reviewEvent, deliveryId: "delivery-2", noteId: 10 }, { ...deps, reviewMergeRequest });
     expect(reviewMergeRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("updates the visible MR operation comment when repository execution is busy", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.scm.target).mockResolvedValue({ kind: "merge_request", iid: 4, title: "MR", description: "", state: "opened", webUrl: "https://git/mr/4", labels: [], targetBranch: "main", sourceBranch: "feature", headSha: "abc" });
+    const reviewMergeRequest = vi.fn().mockRejectedValue(new Error("repository group/repo already has an active AutoDev run"));
+    const reviewEvent = { ...event("review"), target: { kind: "merge_request" as const, iid: 4 } };
+    await expect(executeGitLabCommand(reviewEvent, { ...deps, reviewMergeRequest })).rejects.toThrow("active AutoDev run");
+    expect(deps.store.finishInvocation).toHaveBeenCalledWith("gitlab:1:merge_request:4", "9:review", "failed", expect.stringContaining("active AutoDev run"));
+    expect(deps.scm.commentTarget).toHaveBeenNthCalledWith(1, "1", "merge_request", 4, expect.stringContaining("状态：**⏳ 工作中**"));
+    expect(deps.scm.commentTarget).toHaveBeenLastCalledWith("1", "merge_request", 4, expect.stringContaining("状态：**❌ 执行失败**"));
   });
 
   it("ignores bot events and duplicate deliveries", async () => {

@@ -18,7 +18,23 @@ automation:
 
 verification:
   commands: []
-  path_rules: []
+  path_rules:
+    - pattern: "**/*.go"
+      commands:
+        - id: go-format
+          command: 'test -z "$(git ls-files -- "*.go" ":(exclude)gen/**" ":(exclude)ent/dao/**" | xargs -r gofmt -l)"'
+          timeout: 5m
+        - id: go-test
+          command: go test ./...
+          timeout: 30m
+        - id: go-build
+          command: go build ./cmd/server ./cmd/adp
+          timeout: 15m
+    - pattern: "frontend/**"
+      commands:
+        - id: frontend-verify
+          command: pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend run check && node --test frontend/tests/*.test.mjs && pnpm --dir frontend run build
+          timeout: 30m
 
 security:
   gitlab_min_access_level: 30

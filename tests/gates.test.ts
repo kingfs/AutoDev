@@ -27,6 +27,11 @@ describe("quality gates", () => {
     expect(addChangedPathGates(gates, config, ["frontend/other.ts"])).toHaveLength(6);
   });
 
+  it("preserves configured command timeouts in materialized gates", () => {
+    const timed = autoDevConfigSchema.parse({ repository: { provider: "gitlab", url: "https://git.example/repo.git" }, automation: {}, verification: { commands: [{ id: "slow", command: "true", timeout: "2h" }] }, security: {} });
+    expect(materializeGates(timed, plan)).toEqual(expect.arrayContaining([expect.objectContaining({ id: "slow", timeout: "2h" })]));
+  });
+
   it("executes commands and enforces denied paths", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "autodev-gates-"));
     await writeFile(path.join(workspace, "ok"), "ok");
