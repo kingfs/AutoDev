@@ -9,8 +9,20 @@ import type { ReviewFindingRecord } from "../src/state/command-store.js";
 import { runChecked } from "../src/git/command.js";
 import type { DevelopmentRuntime } from "../src/runtime/runtime.js";
 import type { GitLabClient } from "../src/scm/gitlab.js";
+import { buildMergeReviewPrompt } from "../src/runtime/merge-review-prompt.js";
 
 describe("Merge Request review", () => {
+  it("bounds large MR prompts below process argument limits", () => {
+    const prompt = buildMergeReviewPrompt(
+      { kind: "merge_request", iid: 8, title: "Large", description: "界".repeat(10_000), state: "opened", webUrl: "https://git/mr/8", labels: [], sourceBranch: "feature", targetBranch: "main", headSha: "head", diff: `diff --git a/a b/a\n${"+界".repeat(200_000)}` },
+      { baseBranch: "main", baseSha: "base", taskBranch: "feature", headSha: "head", changedFiles: ["a"], clean: true },
+      [],
+    );
+    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(60_000);
+    expect(prompt).toContain("diffTruncated");
+    expect(prompt).toContain("authoritative workspace");
+  });
+
   it("keeps a deterministic finding identity across line changes and reconciles prior status", () => {
     expect(findingFingerprint({ title: " Missing check ", path: "src/a.ts" })).toBe(findingFingerprint({ title: "missing   check", path: "src/a.ts" }));
     const previous: ReviewFindingRecord[] = [
