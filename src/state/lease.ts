@@ -26,7 +26,8 @@ export class FileLeaseManager {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     const current = await this.read(key);
-    if (!current || Date.parse(current.expiresAt) <= now.getTime()) {
+    const legacyOrphan = current && Date.parse(current.expiresAt) - Date.parse(current.acquiredAt) > 10 * 60_000 && now.getTime() - Date.parse(current.acquiredAt) > 10 * 60_000;
+    if (!current || Date.parse(current.expiresAt) <= now.getTime() || legacyOrphan) {
       await rm(filename, { force: true });
       try {
         await writeFile(filename, `${JSON.stringify(lease)}\n`, { flag: "wx", mode: 0o600 });
@@ -37,6 +38,20 @@ export class FileLeaseManager {
       }
     }
     return null;
+  }
+
+  async renew(lease: Lease, ttlMs: number, now = new Date()): Promise<Lease | null> {
+    const current = await this.read(lease.key);
+    if (current?.owner !== lease.owner) return null;
+    const renewed = { ...current, expiresAt: new Date(now.getTime() + ttlMs).toISOString() };
+    await writeFile(this.#filename(lease.key), `${JSON.stringify(renewed)}\n`, { mode: 0o600 });
+    return renewed;
+  }
+
+  keepAlive(lease: Lease, ttlMs = 120_000, intervalMs = 30_000): () => void {
+    const timer = setInterval(() => { void this.renew(lease, ttlMs); }, intervalMs);
+    timer.unref();
+    return () => clearInterval(timer);
   }
 
   async acquireWithRetry(key: string, owner: string, ttlMs: number, options: { waitMs: number; pollMs: number } = { waitMs: 120_000, pollMs: 2_000 }): Promise<Lease> {

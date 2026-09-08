@@ -30,4 +30,15 @@ describe("repository lease", () => {
     await manager.acquire("repo", "old", 60_000);
     await expect(manager.acquireWithRetry("repo", "new", 20, { waitMs: 5, pollMs: 1 })).rejects.toThrow(/owner=old/);
   });
+
+  it("renews only the owning lease and migrates legacy long-lived orphans", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-lease-"));
+    const manager = new FileLeaseManager(root);
+    const lease = (await manager.acquire("repo", "owner", 60_000, new Date(0)))!;
+    expect(await manager.renew({ ...lease, owner: "other" }, 60_000, new Date(1))).toBeNull();
+    expect((await manager.renew(lease, 60_000, new Date(2)))?.expiresAt).toBe(new Date(60_002).toISOString());
+    await manager.release(lease);
+    await manager.acquire("legacy", "old", 20 * 60_000, new Date(0));
+    expect((await manager.acquire("legacy", "new", 120_000, new Date(11 * 60_000)))?.owner).toBe("new");
+  });
 });

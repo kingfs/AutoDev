@@ -37,10 +37,11 @@ async function main(): Promise<void> {
         reviewMergeRequest: async (mr, previousFindings) => {
           const leases = new FileLeaseManager(path.join(stateRoot, "leases"));
           const owner = `mr-review-${mr.iid}-${mr.headSha}`;
-          const lease = await leases.acquireWithRetry(`gitlab:${commandEvent.project.id}`, owner, parseDuration(config.automation.run_timeout) + 300_000);
+          const lease = await leases.acquireWithRetry(`gitlab:${commandEvent.project.id}`, owner, 120_000);
+          const stopKeepAlive = leases.keepAlive(lease);
           try {
             return await reviewMergeRequest(mr, { config, workspace, artifactRoot: path.join(stateRoot, "artifacts", "merge-reviews", String(mr.iid)), runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }), scm, projectId: commandEvent.project.id, previousFindings });
-          } finally { await leases.release(lease); }
+          } finally { stopKeepAlive(); await leases.release(lease); }
         },
       });
       console.log(`__AUTODEV_COMMAND_RESULT__${JSON.stringify(result)}`);
@@ -60,7 +61,8 @@ async function runIssueWorkflow(item: WorkItem, config: AutoDevConfig, workspace
   const claim = await store.claim(key, proposedRunId);
   const runId = claim.runId;
   const leases = new FileLeaseManager(path.join(stateRoot, "leases"));
-  const lease = await leases.acquireWithRetry(`${item.provider}:${item.repository.id}`, runId, parseDuration(config.automation.run_timeout) + 300_000);
+  const lease = await leases.acquireWithRetry(`${item.provider}:${item.repository.id}`, runId, 120_000);
+  const stopKeepAlive = leases.keepAlive(lease);
   let state;
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(new Error(`AutoDev run exceeded ${config.automation.run_timeout}`)), parseDuration(config.automation.run_timeout));
@@ -76,6 +78,7 @@ async function runIssueWorkflow(item: WorkItem, config: AutoDevConfig, workspace
       forceRetry,
     });
   } finally {
+    stopKeepAlive();
     clearTimeout(deadline);
     process.off("SIGTERM", terminate);
     process.off("SIGINT", terminate);
