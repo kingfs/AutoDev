@@ -32,3 +32,14 @@ export const reviewSchema = z.object({
   acceptanceCoverage: z.array(z.object({ criterion: z.string(), covered: z.boolean(), evidence: z.string() })),
   findings: z.array(z.object({ severity: risk, title: z.string(), evidence: z.string() })),
 });
+
+export const analysisSchema = z.object({
+  summary: z.string(),
+  codeEvidence: z.array(z.object({ path: z.string(), symbol: z.string(), evidence: z.string() })),
+  validity: z.string(),
+  necessity: z.string(),
+  feasibility: z.string(),
+  risks: z.array(z.object({ level: risk, area: z.string(), description: z.string() })),
+  questions: z.array(z.string()),
+  recommendation: z.enum(["proceed", "needs_human", "reject"]),
+});

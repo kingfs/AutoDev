@@ -2,8 +2,8 @@ import runtime from "@chaitin-ai/agent-compose-runtime-sdk";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { toJSONSchema, type ZodType } from "zod";
-import type { ImplementationResult, PlanResult, ReviewResult } from "../domain.js";
-import { implementationSchema, planSchema, reviewSchema } from "./schemas.js";
+import type { AnalysisResult, ImplementationResult, PlanResult, ReviewResult } from "../domain.js";
+import { analysisSchema, implementationSchema, planSchema, reviewSchema } from "./schemas.js";
 
 export interface AgentCall<T> {
   value: T;
@@ -12,6 +12,7 @@ export interface AgentCall<T> {
 }
 
 export interface DevelopmentRuntime {
+  analyze(prompt: string): Promise<AgentCall<AnalysisResult>>;
   plan(prompt: string): Promise<AgentCall<PlanResult>>;
   implement(prompt: string): Promise<AgentCall<ImplementationResult>>;
   review(prompt: string): Promise<AgentCall<ReviewResult>>;
@@ -66,6 +67,10 @@ export class AgentComposeRuntime implements DevelopmentRuntime {
     this.#stateRoot = options.stateRoot;
     this.#timeoutMs = options.timeoutMs;
     this.#redactedEnv = options.redactedEnv ?? [];
+  }
+
+  analyze(prompt: string): Promise<AgentCall<AnalysisResult>> {
+    return this.#call(prompt, analysisSchema, false);
   }
 
   plan(prompt: string): Promise<AgentCall<PlanResult>> {

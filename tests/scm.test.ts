@@ -13,6 +13,27 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe("SCM comments", () => {
+  it("reads authoritative GitLab identity, membership and issue target", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ id: 99, username: "autodev-bot", bot: true }))
+      .mockResolvedValueOnce(response({ id: 1, path_with_namespace: "group/repo" }))
+      .mockResolvedValueOnce(response({ access_level: 30 }))
+      .mockResolvedValueOnce(response({ iid: 7, title: "Bug", description: "Broken", state: "opened", web_url: "https://git/issues/7", labels: ["ai-ready"] }));
+    const client = new GitLabClient({ baseUrl: "https://gitlab.example", token: "secret", fetcher });
+    await expect(client.currentUser()).resolves.toMatchObject({ id: 99, bot: true });
+    await expect(client.project("group/repo")).resolves.toMatchObject({ id: 1 });
+    await expect(client.memberAccess("1", 7)).resolves.toBe(30);
+    await expect(client.target("1", "issue", 7)).resolves.toMatchObject({ kind: "issue", iid: 7, title: "Bug" });
+  });
+
+  it("reads an MR and its raw diff at the authoritative target", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ iid: 8, title: "Change", state: "opened", web_url: "https://git/mr/8", source_branch: "feature", target_branch: "main", diff_refs: { head_sha: "abc" } }))
+      .mockResolvedValueOnce(new Response("diff --git a/a b/a", { status: 200 }));
+    const client = new GitLabClient({ baseUrl: "https://gitlab.example", token: "secret", fetcher });
+    await expect(client.target("1", "merge_request", 8)).resolves.toMatchObject({ kind: "merge_request", headSha: "abc", diff: expect.stringContaining("diff --git") });
+  });
+
   it("updates an existing GitLab AutoDev comment", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(response([{ id: 9, body: "<!-- autodev:run-1 --> old" }]))

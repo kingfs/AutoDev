@@ -4,6 +4,19 @@ import { requestJson } from "./scm.js";
 
 interface GitLabMR { id: number; iid: number; web_url: string; source_branch: string; target_branch: string; state: string; draft?: boolean; work_in_progress?: boolean }
 interface GitLabPipeline { id: number; sha: string; status: string; web_url: string }
+export interface GitLabTargetSnapshot {
+  kind: "issue" | "merge_request";
+  iid: number;
+  title: string;
+  description: string;
+  state: string;
+  webUrl: string;
+  labels: string[];
+  sourceBranch?: string;
+  targetBranch?: string;
+  headSha?: string;
+  diff?: string;
+}
 
 export class GitLabClient implements SCMClient {
   readonly #baseUrl: string;
@@ -26,6 +39,43 @@ export class GitLabClient implements SCMClient {
         await this.#request(`${root}/${existing.id}`, { method: "PUT", body: JSON.stringify({ body }) }, [200]);
         return;
       }
+    }
+    await this.#request(root, { method: "POST", body: JSON.stringify({ body }) }, [201]);
+  }
+
+  async currentUser(): Promise<{ id: number; username: string; bot: boolean }> {
+    return this.#request("/user", {}, [200]);
+  }
+
+  async project(fullName: string): Promise<{ id: number; path_with_namespace: string }> {
+    return this.#request(`/projects/${encodeURIComponent(fullName)}`, {}, [200]);
+  }
+
+  async memberAccess(projectId: string, userId: number): Promise<number> {
+    const member = await this.#request<{ access_level: number }>(`/projects/${encodeURIComponent(projectId)}/members/all/${userId}`, {}, [200]);
+    return member.access_level;
+  }
+
+  async target(projectId: string, kind: "issue" | "merge_request", iid: number): Promise<GitLabTargetSnapshot> {
+    if (kind === "issue") {
+      const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[] }>(`/projects/${encodeURIComponent(projectId)}/issues/${iid}`, {}, [200]);
+      return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [] };
+    }
+    const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; source_branch: string; target_branch: string; sha?: string; diff_refs?: { head_sha?: string } }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}`, {}, [200]);
+    const response = await this.#fetch(`${this.#baseUrl}/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/raw_diffs`, { headers: this.#headers() });
+    if (!response.ok) throw new Error(`GET GitLab MR raw diff failed: HTTP ${response.status}`);
+    const headSha = value.diff_refs?.head_sha ?? value.sha;
+    return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], sourceBranch: value.source_branch, targetBranch: value.target_branch, ...(headSha ? { headSha } : {}), diff: (await response.text()).slice(0, 250_000) };
+  }
+
+  async commentTarget(projectId: string, kind: "issue" | "merge_request", iid: number, body: string): Promise<void> {
+    const collection = kind === "issue" ? "issues" : "merge_requests";
+    const root = `/projects/${encodeURIComponent(projectId)}/${collection}/${iid}/notes`;
+    const marker = markerFrom(body);
+    if (marker) {
+      const notes = await this.#paginate<{ id: number; body: string }>(root, "&sort=desc");
+      const existing = notes.find((note) => note.body.includes(marker));
+      if (existing) { await this.#request(`${root}/${existing.id}`, { method: "PUT", body: JSON.stringify({ body }) }, [200]); return; }
     }
     await this.#request(root, { method: "POST", body: JSON.stringify({ body }) }, [201]);
   }
@@ -86,7 +136,7 @@ export class GitLabClient implements SCMClient {
   }
 }
 
-function markerFrom(body: string): string | null { return body.match(/<!-- autodev:[^>]+ -->/)?.[0] ?? null; }
+function markerFrom(body: string): string | null { return body.match(/<!-- autodev(?:-command)?:[^>]+ -->/)?.[0] ?? null; }
 
 function mapMR(value: GitLabMR): ChangeRequest {
   return { id: String(value.id), number: value.iid, url: value.web_url, sourceBranch: value.source_branch, targetBranch: value.target_branch, state: value.state === "merged" ? "merged" : value.state === "closed" ? "closed" : "open", draft: Boolean(value.draft ?? value.work_in_progress) };

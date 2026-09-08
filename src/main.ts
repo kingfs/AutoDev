@@ -8,13 +8,34 @@ import { normalizeWebhook } from "./scm/webhook.js";
 import { FileRunStateStore } from "./state/store.js";
 import { FileLeaseManager } from "./state/lease.js";
 import { parseDuration } from "./util/duration.js";
+import { normalizeGitLabCommandEvent } from "./scm/gitlab-events.js";
+import { GitLabClient } from "./scm/gitlab.js";
+import { CommandStateStore } from "./state/command-store.js";
+import { executeGitLabCommand } from "./controller/command.js";
 
 async function main(): Promise<void> {
   const config = await loadConfig(process.env.AUTODEV_CONFIG ?? "/etc/autodev/config.yml");
   const workspace = path.resolve(process.env.AUTODEV_WORKSPACE ?? "/workspace");
   const stateRoot = path.resolve(process.env.AUTODEV_STATE_ROOT ?? "/state");
   const rawEvent = JSON.parse(process.env.AUTODEV_WEBHOOK_EVENT ?? "{}") as { payload?: { body?: unknown; headers?: Record<string, string> } };
-  const item = normalizeWebhook(config.repository.provider, rawEvent.payload?.body ?? rawEvent, lowerHeaders(rawEvent.payload?.headers ?? {}));
+  const body = rawEvent.payload?.body ?? rawEvent;
+  const headers = lowerHeaders(rawEvent.payload?.headers ?? {});
+  if (config.repository.provider === "gitlab") {
+    const commandEvent = normalizeGitLabCommandEvent(body, headers);
+    if (commandEvent) {
+      const scm = createSCMClient(config);
+      if (!(scm instanceof GitLabClient)) throw new Error("GitLab command requires GitLab SCM client");
+      const result = await executeGitLabCommand(commandEvent, {
+        config,
+        scm,
+        store: new CommandStateStore(path.join(stateRoot, "commands")),
+        runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
+      });
+      console.log(`__AUTODEV_COMMAND_RESULT__${JSON.stringify(result)}`);
+      return;
+    }
+  }
+  const item = normalizeWebhook(config.repository.provider, body, headers);
   const key = idempotencyKey(item);
   const store = new FileRunStateStore(path.join(stateRoot, "runs"));
   const proposedRunId = `run-${item.issue.number}-${keyHash(taskKey(item))}`;

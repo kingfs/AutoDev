@@ -2,9 +2,12 @@
 
 ## 1. 目标
 
-AutoDev 把经过信任检查的 Issue 转换成可验证的代码变更提案。它不是一个大型
-自治 Prompt，而是围绕 Coding Agent 构建的自动化控制器：概率性工作交给模型，
-确定性工作交给控制程序。
+AutoDev 基于代码事实分析 Issue，并把科学合理且通过策略的任务转换成可验证的代码
+变更提案；它也将面向 MR 提供独立的合入审查。它不是一个大型自治 Prompt，而是
+围绕 Coding Agent 构建的自动化控制器：概率性工作交给模型，确定性工作交给控制程序。
+
+目标产品边界、GitLab 事件和评论命令见
+[产品定位与 GitLab 深度集成](product-positioning.md)。
 
 首个 Runtime 平台是
 [agent-compose](https://github.com/chaitin/agent-compose)。AutoDev 使用其

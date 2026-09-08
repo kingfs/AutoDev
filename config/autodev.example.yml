@@ -29,6 +29,8 @@ verification:
           cwd: frontend
 
 security:
+  # GitLab Developer=30；评论命令的操作者至少需要此项目权限。
+  gitlab_min_access_level: 30
   # 实际执行 Webhook 操作的用户，例如添加 ai-ready 标签的维护者。
   allowed_actors:
     - trusted-maintainer

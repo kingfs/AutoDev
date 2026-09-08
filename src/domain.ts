@@ -115,6 +115,17 @@ export interface ReviewResult {
   findings: Array<{ severity: RiskLevel; title: string; evidence: string }>;
 }
 
+export interface AnalysisResult {
+  summary: string;
+  codeEvidence: Array<{ path: string; symbol: string; evidence: string }>;
+  validity: string;
+  necessity: string;
+  feasibility: string;
+  risks: Array<{ level: RiskLevel; area: string; description: string }>;
+  questions: string[];
+  recommendation: "proceed" | "needs_human" | "reject";
+}
+
 export interface ChangeRequest {
   id: string;
   number: number;

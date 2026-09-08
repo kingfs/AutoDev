@@ -31,6 +31,7 @@ nav:
   - 架构:
       - 系统架构: architecture/system.md
       - 工作流契约: architecture/workflow.md
+      - 产品定位与 GitLab 集成: architecture/product-positioning.md
       - 职责边界: architecture/responsibility-boundary.md
   - 运维与采用:
       - 采用路径: operations/adoption.md

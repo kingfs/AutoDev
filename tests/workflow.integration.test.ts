@@ -40,6 +40,7 @@ describe("workflow integration", () => {
     const implementation: ImplementationResult = { summary: "implemented", changedFiles: ["feature.txt"], testsAttempted: [], remainingRisks: [] };
     const review: ReviewResult = { approved: true, summary: "approved", acceptanceCoverage: [{ criterion: "file exists", covered: true, evidence: "diff" }], findings: [] };
     const runtime: DevelopmentRuntime = {
+      analyze: vi.fn(),
       plan: vi.fn().mockResolvedValue({ value: plan, threadId: "p", transcript: "" }),
       implement: vi.fn().mockImplementation(async () => { await runChecked("bash", ["-lc", "echo broken > feature.txt"], { cwd: workspace }); return { value: implementation, threadId: "i", transcript: "" }; }),
       review: vi.fn().mockResolvedValue({ value: review, threadId: "r", transcript: "" }),

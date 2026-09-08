@@ -21,6 +21,7 @@ verification:
   path_rules: []
 
 security:
+  gitlab_min_access_level: 30
   denied_paths:
     - ".github/workflows/**"
     - ".gitlab-ci.yml"

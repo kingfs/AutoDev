@@ -3,10 +3,10 @@
 > 文档站会在 GitHub Release 发布时自动更新。工程设计、运维指南与故事连载均由
 > 仓库中的 Markdown 构建，参见 [文档导航](docs/engineering-series/README.md)。
 
-AutoDev 是一个基于策略驱动的 AI 自动化开发系统。它接收 GitHub 或
-GitLab Issue，通过 AI Agent 完成需求分析、代码实现、语义审查和失败修复，
-再由确定性控制程序执行质量门禁、Git 提交、分支推送、MR/PR 创建、CI 观察
-和结果回报。
+AutoDev 是一个证据驱动、策略受控的仓库问题分析、自动实现与合入审查系统。
+当前版本以 GitHub/GitLab Issue 自动开发为主；目标能力还包括基于代码事实判断
+Issue 的合理性、必要性和风险，以及对 MR 的实现质量、逻辑闭环和可合入性进行审查。
+能力现状与演进边界见[产品定位与 GitLab 深度集成](docs/architecture/product-positioning.md)。
 
 本项目基于并引用开源项目
 [chaitin/agent-compose](https://github.com/chaitin/agent-compose)。
@@ -65,7 +65,8 @@ Issue 报告与任务结束
 ```
 
 AutoDev 与 agent-compose 的完整责任划分见
-[职责边界](docs/architecture/responsibility-boundary.md)。
+[职责边界](docs/architecture/responsibility-boundary.md)，后续里程碑见
+[交付路线图](docs/operations/roadmap.md)。
 
 ## 前置条件
 
@@ -231,6 +232,7 @@ security:
 - `denied_paths`：任何情况下均不允许自动修改的路径；
 - `require_human_review`：修改后需要人工批准的路径；
 - `human_approval_label`：人工批准标签，默认 `ai-approved`；
+- `gitlab_min_access_level`：执行评论命令所需的最低 GitLab 项目权限，默认 Developer（30）；
 - `local_repair_limit` / `ci_repair_limit`：本地和 CI 修复预算。
 
 常见项目配置见 [质量门禁示例](docs/operations/policy-examples.md)。
@@ -280,9 +282,13 @@ export AUTODEV_WEBHOOK_TOKEN='<使用密码生成器生成的随机值>'
 2. URL 设置为：
    `https://<agent-compose-host>/api/webhooks/webhook.gitlab.issue`；
 3. Secret token 设置为 `AUTODEV_WEBHOOK_TOKEN`；
-4. 只选择 `Issues events`；
+4. 选择 `Issues events`、`Comments` 和 `Merge request events`；
 5. 根据部署情况启用 SSL verification；
 6. 保存后使用 GitLab 的 Test 功能发送 Issue Hook。
+
+当前评论命令支持 `@autodev help`、`@autodev status` 和只读的
+`@autodev analyze`。若使用 Project Access Token，GitLab 创建的真实 bot username
+并不是 `autodev`；AutoDev 仍会解析上述命令文本，也支持 `/autodev` 前缀。
 
 ### GitHub 接入
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeWebhook } from "../src/scm/webhook.js";
+import { normalizeGitLabCommandEvent, parseAutoDevCommand } from "../src/scm/gitlab-events.js";
 
 describe("webhook normalization", () => {
   it("normalizes a GitLab issue hook", () => {
@@ -24,5 +25,31 @@ describe("webhook normalization", () => {
     expect(item.provider).toBe("github");
     expect(item.issue.author).toBe("bob");
     expect(item.actor).toBe("maintainer");
+  });
+});
+
+describe("GitLab command events", () => {
+  it("parses an AutoDev command from an issue note", () => {
+    const event = normalizeGitLabCommandEvent({
+      object_kind: "note",
+      user: { id: 7, username: "alice" },
+      project: { id: 1, path_with_namespace: "group/repo" },
+      object_attributes: { id: 9, action: "create", noteable_type: "Issue", note: "please @autodev analyze" },
+      issue: { iid: 3 },
+    }, { "x-gitlab-event-uuid": "delivery" });
+    expect(event).toMatchObject({ deliveryId: "delivery", command: "analyze", target: { kind: "issue", iid: 3 }, noteId: 9 });
+  });
+
+  it("supports slash commands and makes a bare mention safe help", () => {
+    expect(parseAutoDevCommand("/autodev status")).toBe("status");
+    expect(parseAutoDevCommand("@autodev")).toBe("help");
+    expect(parseAutoDevCommand("ordinary comment")).toBeNull();
+  });
+
+  it("recognizes MR events without turning them into issue work", () => {
+    expect(normalizeGitLabCommandEvent({
+      object_kind: "merge_request", user: { id: 7, username: "alice" },
+      project: { id: 1, path_with_namespace: "group/repo" }, object_attributes: { iid: 4 },
+    }, {})).toMatchObject({ eventKind: "merge_request", target: { kind: "merge_request", iid: 4 } });
   });
 });
