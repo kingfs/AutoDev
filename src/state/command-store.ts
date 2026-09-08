@@ -6,6 +6,21 @@ export interface CommandTargetState {
   targetKey: string;
   updatedAt: string;
   invocations: CommandInvocation[];
+  reviewFindings?: ReviewFindingRecord[];
+}
+
+export type ReviewFindingStatus = "new" | "still_present" | "resolved" | "relocated_or_unconfirmed";
+export interface ReviewFindingRecord {
+  fingerprint: string;
+  severity: "low" | "medium" | "high" | "critical";
+  title: string;
+  evidence: string;
+  recommendation: string;
+  path?: string;
+  line?: number;
+  firstSeenSha: string;
+  latestConfirmedSha: string;
+  status: ReviewFindingStatus;
 }
 
 export interface CommandInvocation { id: string; command: string; actor: string; createdAt: string; revision?: string; attempts: CommandAttempt[] }
@@ -59,6 +74,14 @@ export class CommandStateStore {
     attempt.summary = summary;
     attempt.finishedAt = new Date().toISOString();
     state.updatedAt = attempt.finishedAt;
+    await this.saveTarget(state);
+  }
+
+  async saveReviewFindings(targetKey: string, findings: ReviewFindingRecord[]): Promise<void> {
+    const state = await this.loadTarget(targetKey);
+    if (!state) throw new Error(`command target ${targetKey} is unavailable`);
+    state.reviewFindings = findings;
+    state.updatedAt = new Date().toISOString();
     await this.saveTarget(state);
   }
 

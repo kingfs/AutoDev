@@ -15,4 +15,12 @@ describe("command target state", () => {
     expect(state?.invocations[0]?.attempts[0]).toMatchObject({ number: 1, status: "completed", summary: "valid" });
     expect(state?.invocations[1]).toMatchObject({ command: "run", attempts: [{ status: "running" }] });
   });
+
+  it("persists MR finding continuity on the target", async () => {
+    const store = new CommandStateStore(await mkdtemp(path.join(os.tmpdir(), "autodev-command-")));
+    const targetKey = "gitlab:1:merge_request:8";
+    await store.startInvocation(targetKey, "event:review", "review", "alice", "sha-1");
+    await store.saveReviewFindings(targetKey, [{ fingerprint: "finding", severity: "high", title: "Bug", evidence: "line", recommendation: "fix", firstSeenSha: "sha-1", latestConfirmedSha: "sha-1", status: "new" }]);
+    expect((await store.loadTarget(targetKey))?.reviewFindings).toEqual([expect.objectContaining({ fingerprint: "finding", status: "new" })]);
+  });
 });

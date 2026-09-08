@@ -3,7 +3,7 @@ import type { DevelopmentRuntime } from "../runtime/runtime.js";
 import { buildAnalysisPrompt } from "../runtime/analysis-prompt.js";
 import type { GitLabClient, GitLabTargetSnapshot } from "../scm/gitlab.js";
 import type { GitLabCommandEvent } from "../scm/gitlab-events.js";
-import type { CommandStateStore } from "../state/command-store.js";
+import type { CommandStateStore, ReviewFindingRecord } from "../state/command-store.js";
 import type { WorkItem } from "../domain.js";
 import { decideAnalysisAdmission } from "../policies/analysis.js";
 
@@ -13,7 +13,7 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
   runtime: DevelopmentRuntime;
   store: CommandStateStore;
   runIssue?: (item: WorkItem, retry: boolean) => Promise<{ status: string; reason?: string }>;
-  reviewMergeRequest?: (mr: GitLabTargetSnapshot) => Promise<{ status: string; revision: string; summary: string }>;
+  reviewMergeRequest?: (mr: GitLabTargetSnapshot, previousFindings: ReviewFindingRecord[]) => Promise<{ status: string; revision: string; summary: string; findings: ReviewFindingRecord[] }>;
 }): Promise<{ status: "ignored" | "completed"; reason: string }> {
   if (!event.target || (event.eventKind === "note" && !event.command)) return { status: "ignored", reason: "event contains no AutoDev command" };
   if (event.eventKind === "merge_request" && !["open", "update", "reopen"].includes(event.action ?? "update")) return { status: "ignored", reason: `merge request action ${event.action} is not reviewable` };
@@ -79,7 +79,8 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
     await dependencies.store.startInvocation(targetKey, invocationId, "review", event.actor.username, mr.headSha);
     let result;
     try {
-      result = await dependencies.reviewMergeRequest(mr);
+      result = await dependencies.reviewMergeRequest(mr, current?.reviewFindings ?? []);
+      await dependencies.store.saveReviewFindings(targetKey, result.findings);
       await dependencies.store.finishInvocation(targetKey, invocationId, "completed", result.summary);
     } catch (error) {
       await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));

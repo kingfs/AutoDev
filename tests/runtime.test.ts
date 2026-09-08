@@ -32,7 +32,7 @@ afterEach(() => {
 
 describe("AgentComposeRuntime structured output", () => {
   it("validates a merge-readiness review result", async () => {
-    const value = { summary: "ready", coreChanges: ["change"], logicClosure: "closed", requirementCoverage: "covered", findings: [], residualRisks: [], recommendedVerdict: "merge_ready" };
+    const value = { summary: "ready", coreChanges: ["change"], logicClosure: "closed", requirementCoverage: "covered", findings: [], resolvedFindingFingerprints: [], residualRisks: [], recommendedVerdict: "merge_ready" };
     agent.mockResolvedValue({ json: value, finalText: JSON.stringify(value), threadId: "mr", transcript: "ok" });
     await expect(subject().reviewMergeRequest("review")).resolves.toMatchObject({ value });
   });

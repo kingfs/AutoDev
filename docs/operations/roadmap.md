@@ -40,12 +40,15 @@
 
 验收：严重问题 MR 必须明确拒绝合入；质量良好 MR 必须给出核心工作摘要和“达到合入标准”的理由。
 
-## M4：MR 修复确认与低级错误闭环
+## M4：MR 修复确认与低级错误闭环——已编码，等待真实 MR 证明
 
-- 对之前 finding 建立稳定指纹，修复后标记 resolved/仍存在；
-- `@autodev review` 审查当前 SHA，`@autodev retry` 重跑失败审查；
-- 可选 `@autodev fix`，默认只生成建议，显式授权后才创建修复分支/MR；
-- 行级 Discussion、重复评论抑制和结果更新。
+- 对 finding 建立稳定指纹，持久化首次发现 SHA、最近确认 SHA 和状态；
+- 新 SHA 将旧 finding 分类为 resolved、still_present 或 relocated_or_unconfirmed；
+- 只有经过当前 raw diff 验证的新文件行才发布行级 Discussion；稳定 marker 用于更新而非重复发布；
+- `@autodev review` 可显式重跑当前 SHA，包括自动审查失败或需要人工复核的场景；
+- 未确认消失的旧 finding 阻止 `merge_ready`，仍不自动 Approve、Merge 或修改作者分支。
+
+验收：指定测试 MR 产生行级 finding，修复提交后同一 finding 被关联更新，结论评论展示修复状态，重复事件和显式复审不产生重复 Discussion。
 
 ## M5：真实仓库验收与运维
 
@@ -53,6 +56,8 @@
 - 指标：响应延迟、重复率、拒绝准确性、finding 修复确认率、误报/漏报；
 - 状态和 artifact 清理、成本预算、权限轮换和故障恢复；
 - Pipeline/Job 事件仅作为可选证据源，不改变核心产品流程。
+
+M5 先完成 Issue、MR 及 finding 修复确认三条真实 smoke test，再处理清理、指标和故障恢复；不在验收完成前加入 `@autodev fix`。
 
 ## 优先级原则
 

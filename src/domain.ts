@@ -128,12 +128,22 @@ export interface AnalysisResult {
 }
 
 export type MergeReviewVerdict = "blocking" | "needs_attention" | "merge_ready";
+export interface MergeReviewFinding {
+  severity: RiskLevel;
+  title: string;
+  evidence: string;
+  recommendation: string;
+  path?: string | undefined;
+  line?: number | undefined;
+  priorFingerprint?: string | undefined;
+}
 export interface MergeReviewResult {
   summary: string;
   coreChanges: string[];
   logicClosure: string;
   requirementCoverage: string;
-  findings: Array<{ severity: RiskLevel; title: string; evidence: string; recommendation: string }>;
+  findings: MergeReviewFinding[];
+  resolvedFindingFingerprints: string[];
   residualRisks: string[];
   recommendedVerdict: MergeReviewVerdict;
 }

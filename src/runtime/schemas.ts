@@ -50,7 +50,8 @@ export const mergeReviewSchema = z.object({
   coreChanges: z.array(z.string()),
   logicClosure: z.string(),
   requirementCoverage: z.string(),
-  findings: z.array(z.object({ severity: risk, title: z.string(), evidence: z.string(), recommendation: z.string() })),
+  findings: z.array(z.object({ severity: risk, title: z.string(), evidence: z.string(), recommendation: z.string(), path: z.string().optional(), line: z.number().int().positive().optional(), priorFingerprint: z.string().optional() })),
+  resolvedFindingFingerprints: z.array(z.string()),
   residualRisks: z.array(z.string()),
   recommendedVerdict: z.enum(["blocking", "needs_attention", "merge_ready"]),
 });

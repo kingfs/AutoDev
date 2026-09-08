@@ -17,6 +17,8 @@ export interface GitLabTargetSnapshot {
   sourceBranch?: string;
   targetBranch?: string;
   headSha?: string;
+  baseSha?: string;
+  startSha?: string;
   diff?: string;
   commits?: Array<{ id: string; title: string; author: string }>;
   discussions?: Array<{ id: string; notes: Array<{ author: string; body: string; resolved?: boolean }> }>;
@@ -65,13 +67,27 @@ export class GitLabClient implements SCMClient {
       const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; updated_at?: string; author?: { username?: string } }>(`/projects/${encodeURIComponent(projectId)}/issues/${iid}`, {}, [200]);
       return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], ...(value.updated_at ? { updatedAt: value.updated_at } : {}), ...(value.author?.username ? { author: value.author.username } : {}) };
     }
-    const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; source_branch: string; target_branch: string; sha?: string; diff_refs?: { head_sha?: string } }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}`, {}, [200]);
+    const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; source_branch: string; target_branch: string; sha?: string; diff_refs?: { base_sha?: string; start_sha?: string; head_sha?: string } }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}`, {}, [200]);
     const response = await this.#fetch(`${this.#baseUrl}/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/raw_diffs`, { headers: this.#headers() });
     if (!response.ok) throw new Error(`GET GitLab MR raw diff failed: HTTP ${response.status}`);
     const commits = await this.#paginate<{ id: string; title: string; author_name: string }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/commits`);
     const discussions = await this.#paginate<{ id: string; notes: Array<{ author?: { username?: string }; body: string; resolved?: boolean }> }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/discussions`);
     const headSha = value.diff_refs?.head_sha ?? value.sha;
-    return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], sourceBranch: value.source_branch, targetBranch: value.target_branch, ...(headSha ? { headSha } : {}), diff: (await response.text()).slice(0, 250_000), commits: commits.map((commit) => ({ id: commit.id, title: commit.title, author: commit.author_name })), discussions: discussions.map((discussion) => ({ id: discussion.id, notes: discussion.notes.map((note) => ({ author: note.author?.username ?? "unknown", body: note.body, ...(note.resolved === undefined ? {} : { resolved: note.resolved }) })) })) };
+    return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], sourceBranch: value.source_branch, targetBranch: value.target_branch, ...(headSha ? { headSha } : {}), ...(value.diff_refs?.base_sha ? { baseSha: value.diff_refs.base_sha } : {}), ...(value.diff_refs?.start_sha ? { startSha: value.diff_refs.start_sha } : {}), diff: (await response.text()).slice(0, 250_000), commits: commits.map((commit) => ({ id: commit.id, title: commit.title, author: commit.author_name })), discussions: discussions.map((discussion) => ({ id: discussion.id, notes: discussion.notes.map((note) => ({ author: note.author?.username ?? "unknown", body: note.body, ...(note.resolved === undefined ? {} : { resolved: note.resolved }) })) })) };
+  }
+
+  async upsertMergeRequestDiscussion(projectId: string, iid: number, body: string, position?: { baseSha: string; startSha: string; headSha: string; path: string; line: number }, createIfMissing = true): Promise<void> {
+    const root = `/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/discussions`;
+    const marker = markerFrom(body);
+    if (!marker) throw new Error("AutoDev discussion requires an idempotency marker");
+    const discussions = await this.#paginate<{ id: string; notes: Array<{ id: number; body: string }> }>(root);
+    for (const discussion of discussions) {
+      const note = discussion.notes.find((entry) => entry.body.includes(marker));
+      if (note) { await this.#request(`${root}/${encodeURIComponent(discussion.id)}/notes/${note.id}`, { method: "PUT", body: JSON.stringify({ body }) }, [200]); return; }
+    }
+    if (!createIfMissing) return;
+    const payload = position ? { body, position: { position_type: "text", base_sha: position.baseSha, start_sha: position.startSha, head_sha: position.headSha, new_path: position.path, new_line: position.line } } : { body };
+    await this.#request(root, { method: "POST", body: JSON.stringify(payload) }, [201]);
   }
 
   async commentTarget(projectId: string, kind: "issue" | "merge_request", iid: number, body: string): Promise<void> {

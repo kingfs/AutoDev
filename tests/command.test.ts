@@ -33,6 +33,7 @@ function dependencies() {
     finishInvocation: vi.fn().mockImplementation(async (_targetKey: string, id: string, status: "completed" | "failed", summary: string) => {
       const attempt = targetState?.invocations.find((entry) => entry.id === id)?.attempts.at(-1); if (attempt) { attempt.status = status; attempt.summary = summary; }
     }),
+    saveReviewFindings: vi.fn().mockImplementation(async (_targetKey: string, findings: []) => { if (targetState) targetState.reviewFindings = findings; }),
   } as unknown as CommandStateStore;
   const runtime = {
     analyze: vi.fn().mockResolvedValue({ value: { summary: "Evidence found", codeEvidence: [{ path: "src/a.ts", symbol: "run", evidence: "missing check" }], validity: "valid", necessity: "needed", feasibility: "feasible", acceptanceCriteria: ["check passes"], risks: [], questions: [], recommendation: "proceed" }, threadId: "a", transcript: "" }),
@@ -75,13 +76,23 @@ describe("GitLab command controller", () => {
   it("dispatches an automatic MR event once per authoritative SHA", async () => {
     const deps = dependencies();
     vi.mocked(deps.scm.target).mockResolvedValue({ kind: "merge_request", iid: 4, title: "MR", description: "", state: "opened", webUrl: "https://git/mr/4", labels: [], targetBranch: "main", sourceBranch: "feature", headSha: "abc" });
-    const reviewMergeRequest = vi.fn().mockResolvedValue({ status: "merge_ready", revision: "abc", summary: "ready" });
+    const reviewMergeRequest = vi.fn().mockResolvedValue({ status: "merge_ready", revision: "abc", summary: "ready", findings: [] });
     const { command: _command, ...baseEvent } = event("review");
     const mrEvent = { ...baseEvent, eventKind: "merge_request" as const, target: { kind: "merge_request" as const, iid: 4 } };
     await expect(executeGitLabCommand(mrEvent, { ...deps, reviewMergeRequest })).resolves.toEqual({ status: "completed", reason: "review merge_ready" });
-    expect(reviewMergeRequest).toHaveBeenCalledWith(expect.objectContaining({ headSha: "abc" }));
+    expect(reviewMergeRequest).toHaveBeenCalledWith(expect.objectContaining({ headSha: "abc" }), []);
     await expect(executeGitLabCommand({ ...mrEvent, deliveryId: "delivery-2" }, { ...deps, reviewMergeRequest })).resolves.toEqual({ status: "ignored", reason: "merge request revision already reviewed" });
     expect(reviewMergeRequest).toHaveBeenCalledOnce();
+  });
+
+  it("allows an explicit review command to rerun a completed current SHA", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.scm.target).mockResolvedValue({ kind: "merge_request", iid: 4, title: "MR", description: "", state: "opened", webUrl: "https://git/mr/4", labels: [], targetBranch: "main", sourceBranch: "feature", headSha: "abc" });
+    const reviewMergeRequest = vi.fn().mockResolvedValue({ status: "merge_ready", revision: "abc", summary: "ready", findings: [] });
+    const reviewEvent = { ...event("review"), target: { kind: "merge_request" as const, iid: 4 } };
+    await executeGitLabCommand(reviewEvent, { ...deps, reviewMergeRequest });
+    await executeGitLabCommand({ ...reviewEvent, deliveryId: "delivery-2", noteId: 10 }, { ...deps, reviewMergeRequest });
+    expect(reviewMergeRequest).toHaveBeenCalledTimes(2);
   });
 
   it("ignores bot events and duplicate deliveries", async () => {
