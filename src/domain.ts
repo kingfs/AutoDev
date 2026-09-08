@@ -121,6 +121,7 @@ export interface AnalysisResult {
   validity: string;
   necessity: string;
   feasibility: string;
+  acceptanceCriteria: string[];
   risks: Array<{ level: RiskLevel; area: string; description: string }>;
   questions: string[];
   recommendation: "proceed" | "needs_human" | "reject";

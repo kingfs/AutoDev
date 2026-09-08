@@ -1,10 +1,10 @@
-import type { GateEvidence, PlanResult, QualityGate, WorkItem } from "../domain.js";
+import type { AnalysisResult, GateEvidence, PlanResult, QualityGate, WorkItem } from "../domain.js";
 
 function task(item: WorkItem): string {
   return [`Issue #${item.issue.number}: ${item.issue.title}`, "", item.issue.body, "", `Repository: ${item.repository.fullName}`].join("\n");
 }
 
-export function buildPlanPrompt(item: WorkItem): string {
+export function buildPlanPrompt(item: WorkItem, analysis?: AnalysisResult): string {
   return [
     "You are the planning engineer for an automated development workflow.",
     "Investigate the repository and return only the requested structured result.",
@@ -14,6 +14,7 @@ export function buildPlanPrompt(item: WorkItem): string {
     "Identify ambiguity requiring a human instead of inventing material product decisions.",
     "",
     task(item),
+    ...(analysis ? ["", "Approved repository analysis:", JSON.stringify(analysis, null, 2), "The plan must remain consistent with this evidence and acceptance criteria."] : []),
   ].join("\n");
 }
 

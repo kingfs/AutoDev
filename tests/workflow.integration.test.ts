@@ -40,7 +40,7 @@ describe("workflow integration", () => {
     const implementation: ImplementationResult = { summary: "implemented", changedFiles: ["feature.txt"], testsAttempted: [], remainingRisks: [] };
     const review: ReviewResult = { approved: true, summary: "approved", acceptanceCoverage: [{ criterion: "file exists", covered: true, evidence: "diff" }], findings: [] };
     const runtime: DevelopmentRuntime = {
-      analyze: vi.fn(),
+      analyze: vi.fn().mockResolvedValue({ value: { summary: "valid bounded task", codeEvidence: [{ path: "README.md", symbol: "", evidence: "fixture target" }], validity: "valid", necessity: "needed", feasibility: "feasible", acceptanceCriteria: ["file exists"], risks: [], questions: [], recommendation: "proceed" }, threadId: "a", transcript: "" }),
       plan: vi.fn().mockResolvedValue({ value: plan, threadId: "p", transcript: "" }),
       implement: vi.fn().mockImplementation(async () => { await runChecked("bash", ["-lc", "echo broken > feature.txt"], { cwd: workspace }); return { value: implementation, threadId: "i", transcript: "" }; }),
       review: vi.fn().mockResolvedValue({ value: review, threadId: "r", transcript: "" }),
@@ -54,6 +54,23 @@ describe("workflow integration", () => {
     expect(state.revisions[1]?.verification?.passed).toBe(true);
     expect(runtime.repair).toHaveBeenCalledOnce();
     expect(scm.commentIssue).toHaveBeenCalledOnce();
+  });
+
+  it("stops an Issue before planning when repository analysis rejects it", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-analysis-"));
+    const bare = path.join(root, "origin.git"); const workspace = path.join(root, "workspace");
+    await runChecked("git", ["init", "--bare", "-b", "main", bare], { cwd: root });
+    await runChecked("git", ["clone", bare, workspace], { cwd: root });
+    await runChecked("git", ["config", "user.name", "AutoDev Test"], { cwd: workspace });
+    await runChecked("git", ["config", "user.email", "autodev@example.test"], { cwd: workspace });
+    await runChecked("bash", ["-lc", "echo base > README.md"], { cwd: workspace });
+    await runChecked("git", ["add", "README.md"], { cwd: workspace }); await runChecked("git", ["commit", "-m", "base"], { cwd: workspace }); await runChecked("git", ["push", "origin", "main"], { cwd: workspace });
+    const config = autoDevConfigSchema.parse({ repository: { provider: "gitlab", url: `file://${bare}`, required_label: "ai-ready", allowlist: ["group/repo"] }, automation: { mode: "no-push", ci_watch: false }, verification: {}, security: {} });
+    const item = { provider: "gitlab", deliveryId: "d", actor: "alice", action: "open", revision: "r", repository: { provider: "gitlab", id: "1", fullName: "group/repo", cloneUrl: `file://${bare}`, webUrl: "https://git/repo", defaultBranch: "main" }, issue: { id: "9", number: 9, title: "Unneeded", body: "duplicate", labels: ["ai-ready"], author: "alice", url: "https://git/issues/9", updatedAt: "r" } } as WorkItem;
+    const runtime = { analyze: vi.fn().mockResolvedValue({ value: { summary: "already implemented", codeEvidence: [{ path: "README.md", symbol: "", evidence: "feature exists" }], validity: "invalid", necessity: "duplicate", feasibility: "unnecessary", acceptanceCriteria: [], risks: [], questions: [], recommendation: "reject" }, threadId: "a", transcript: "" }), plan: vi.fn() } as unknown as DevelopmentRuntime;
+    const scm = { commentIssue: vi.fn().mockResolvedValue(undefined) } as unknown as SCMClient;
+    const state = await executeWorkflow(item, "run-9", "key", { config, workspace, artifactRoot: path.join(root, "artifacts"), runtime, scm, store: new FileRunStateStore(path.join(root, "state")) });
+    expect(state.status).toBe("rejected"); expect(state.analysis?.recommendation).toBe("reject"); expect(runtime.plan).not.toHaveBeenCalled(); expect(scm.commentIssue).toHaveBeenCalledOnce();
   });
 
   it("persists cancellation received from the agent-compose run", async () => {

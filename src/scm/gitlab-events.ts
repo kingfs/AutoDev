@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export type AutoDevCommand = "help" | "status" | "analyze";
+export type AutoDevCommand = "help" | "status" | "analyze" | "run" | "retry";
 export type GitLabTargetKind = "issue" | "merge_request";
 
 export interface GitLabCommandEvent {
@@ -52,7 +52,7 @@ export function parseAutoDevCommand(note: string): AutoDevCommand | null {
   const match = /(?:^|\s)(?:@autodev|\/autodev)(?:\s+([a-z-]+))?(?=\s|$)/i.exec(note);
   if (!match) return null;
   const command = (match[1] ?? "help").toLowerCase();
-  return ["help", "status", "analyze"].includes(command) ? command as AutoDevCommand : "help";
+  return ["help", "status", "analyze", "run", "retry"].includes(command) ? command as AutoDevCommand : "help";
 }
 
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

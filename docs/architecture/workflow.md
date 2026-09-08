@@ -3,7 +3,7 @@
 ## 阶段图
 
 ```text
-intake → workspace → plan → gates → implement
+intake → workspace → analyze → plan → gates → implement
        → verify → review → publish → ci → report
 ```
 
@@ -16,6 +16,7 @@ intake → workspace → plan → gates → implement
 | --- | --- | --- |
 | Intake | 控制程序 | 保存归一化事件、幂等 Claim、仓库租约 |
 | Workspace | 控制程序 | Fetch、Checkout、任务分支与恢复 |
+| Analyze | Agent + 控制程序 | 只读代码事实分析；控制程序决定是否允许进入实现 |
 | Plan | Agent | 只返回结构化计划 |
 | Gates | 控制程序 | 固化质量策略 |
 | Implement | Agent | 只修改本地 Workspace |

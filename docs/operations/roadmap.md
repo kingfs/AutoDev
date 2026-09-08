@@ -20,7 +20,7 @@
 
 验收：在现有 Issue 和 MR 评论 `@autodev status`，只产生一次可追踪回复，重复投递不重复执行。
 
-## M2：Issue 事实分析与命令化实现
+## M2：Issue 事实分析与命令化实现——已编码，等待真实 Issue 证明
 
 - 独立 Issue 分析结果：证据、合理性、必要性、可行性、风险、影响路径和待澄清问题；
 - 明确 `rejected`、`needs_human`、`accepted` 的决策理由；

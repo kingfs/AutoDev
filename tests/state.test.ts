@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { WorkItem } from "../src/domain.js";
 import { reconcile } from "../src/controller/reconciler.js";
-import { beginRevision, createRunState, currentRevision, replayFailedRun, resumeFromHumanInput } from "../src/state/model.js";
+import { beginRevision, createRunState, currentRevision, replayFailedRun, resumeFromHumanInput, retryRun } from "../src/state/model.js";
 import { FileRunStateStore } from "../src/state/store.js";
 
 const item: WorkItem = {
@@ -79,5 +79,26 @@ describe("run state", () => {
     expect(state).toMatchObject({ status: "running", currentStage: "intake-replay", idempotencyKey: "later-key", workItem: updated });
     expect(state.terminalReason).toBeUndefined();
     expect(state.report).toBeUndefined();
+  });
+
+  it("explicitly retries a terminal run and requires admission and analysis again", () => {
+    const state = createRunState("run-1", "key", item);
+    state.status = "rejected";
+    state.admission = { accepted: true, mode: "draft", reason: "old" };
+    state.analysis = { summary: "old rejection", codeEvidence: [], validity: "", necessity: "", feasibility: "", acceptanceCriteria: [], risks: [], questions: [], recommendation: "reject" };
+    expect(retryRun(state, { ...item, revision: "later" }, "later-key")).toBe(true);
+    expect(state).toMatchObject({ status: "running", currentStage: "intake-retry", idempotencyKey: "later-key" });
+    expect(state.admission).toBeUndefined();
+    expect(state.analysis).toBeUndefined();
+  });
+
+  it("retries a plan clarification without bypassing the planning decision", () => {
+    const state = createRunState("run-1", "key", item);
+    state.status = "needs_human"; state.currentStage = "plan-human-input";
+    state.analysis = { summary: "valid", codeEvidence: [], validity: "", necessity: "", feasibility: "", acceptanceCriteria: [], risks: [], questions: [], recommendation: "proceed" };
+    state.plan = { summary: "ambiguous", acceptanceCriteria: [], affectedAreas: [], implementationSteps: [], risks: [], expectedChangedPaths: [], proposedChecks: [], requiresHumanInput: true, humanQuestions: ["choose"], changeRequest: { title: "", description: "", draft: true } };
+    expect(retryRun(state, { ...item, revision: "later" }, "later-key")).toBe(true);
+    expect(state.analysis?.recommendation).toBe("proceed");
+    expect(state.plan).toBeUndefined();
   });
 });

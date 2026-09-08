@@ -9,6 +9,7 @@ import type {
   QualityGate,
   ReviewResult,
   WorkItem,
+  AnalysisResult,
 } from "../domain.js";
 
 export type RunStatus =
@@ -51,6 +52,7 @@ export interface RunState {
   createdAt: string;
   updatedAt: string;
   workItem: WorkItem;
+  analysis?: AnalysisResult;
   admission?: AdmissionDecision;
   git?: GitCheckpoint;
   plan?: PlanResult;
@@ -116,6 +118,7 @@ export function resumeFromHumanInput(state: RunState, item: WorkItem, idempotenc
   state.status = "running";
   delete state.terminalReason;
   delete state.report;
+  delete state.admission;
   state.currentStage = "intake-resume";
   return true;
 }
@@ -128,5 +131,25 @@ export function replayFailedRun(state: RunState, item: WorkItem, idempotencyKey:
   state.currentStage = "intake-replay";
   delete state.terminalReason;
   delete state.report;
+  return true;
+}
+
+export function retryRun(state: RunState, item: WorkItem, idempotencyKey: string): boolean {
+  if (state.status === "running") return false;
+  const previousStatus = state.status;
+  const previousStage = state.currentStage;
+  state.workItem = item;
+  state.idempotencyKey = idempotencyKey;
+  state.status = "running";
+  state.currentStage = "intake-retry";
+  delete state.terminalReason;
+  delete state.report;
+  delete state.admission;
+  if (previousStatus === "rejected" || previousStage === "analysis-human-input") delete state.analysis;
+  if (previousStage === "plan-human-input") {
+    delete state.plan;
+    state.gates = [];
+    delete state.gatesFrozenAt;
+  }
   return true;
 }

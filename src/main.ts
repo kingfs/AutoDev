@@ -12,6 +12,8 @@ import { normalizeGitLabCommandEvent } from "./scm/gitlab-events.js";
 import { GitLabClient } from "./scm/gitlab.js";
 import { CommandStateStore } from "./state/command-store.js";
 import { executeGitLabCommand } from "./controller/command.js";
+import type { AutoDevConfig } from "./config/schema.js";
+import type { WorkItem } from "./domain.js";
 
 async function main(): Promise<void> {
   const config = await loadConfig(process.env.AUTODEV_CONFIG ?? "/etc/autodev/config.yml");
@@ -30,12 +32,19 @@ async function main(): Promise<void> {
         scm,
         store: new CommandStateStore(path.join(stateRoot, "commands")),
         runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
+        runIssue: (item, retry) => runIssueWorkflow(item, config, workspace, stateRoot, retry),
       });
       console.log(`__AUTODEV_COMMAND_RESULT__${JSON.stringify(result)}`);
       return;
     }
   }
   const item = normalizeWebhook(config.repository.provider, body, headers);
+  const state = await runIssueWorkflow(item, config, workspace, stateRoot, false);
+  console.log(`__AUTODEV_RESULT__${JSON.stringify(state)}`);
+  if (["failed", "budget_exhausted", "cancelled"].includes(state.status)) process.exitCode = 1;
+}
+
+async function runIssueWorkflow(item: WorkItem, config: AutoDevConfig, workspace: string, stateRoot: string, forceRetry: boolean): Promise<{ runId: string; status: string; reason?: string; report?: unknown }> {
   const key = idempotencyKey(item);
   const store = new FileRunStateStore(path.join(stateRoot, "runs"));
   const proposedRunId = `run-${item.issue.number}-${keyHash(taskKey(item))}`;
@@ -56,6 +65,7 @@ async function main(): Promise<void> {
       runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
       scm: createSCMClient(config),
       signal: controller.signal,
+      forceRetry,
     });
   } finally {
     clearTimeout(deadline);
@@ -63,8 +73,7 @@ async function main(): Promise<void> {
     process.off("SIGINT", terminate);
     await leases.release(lease);
   }
-  console.log(`__AUTODEV_RESULT__${JSON.stringify({ runId, status: state.status, reason: state.terminalReason, report: state.report })}`);
-  if (["failed", "budget_exhausted", "cancelled"].includes(state.status)) process.exitCode = 1;
+  return { runId, status: state.status, ...(state.terminalReason ? { reason: state.terminalReason } : {}), ...(state.report ? { report: state.report } : {}) };
 }
 
 function lowerHeaders(headers: Record<string, string>): Record<string, string> { return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])); }

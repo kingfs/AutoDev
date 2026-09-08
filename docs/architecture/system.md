@@ -133,7 +133,7 @@ agent-compose 负责 Clone 和 Sandbox Workspace。AutoDev 在其内部验证：
 持久状态记录：
 
 ```text
-accepted → workspace_ready → planned → gates_frozen
+accepted → workspace_ready → analyzed → planned → gates_frozen
          → implemented → locally_verified → reviewed
          → published → ci_green → completed
 ```

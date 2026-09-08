@@ -6,13 +6,15 @@ import { GitWorkspace } from "../git/workspace.js";
 import { decideAdmission } from "../policies/admission.js";
 import { addChangedPathGates, materializeGates } from "../policies/gates.js";
 import { globMatches } from "../policies/glob.js";
+import { decideAnalysisAdmission } from "../policies/analysis.js";
 import type { DevelopmentRuntime } from "../runtime/runtime.js";
 import { buildImplementationPrompt, buildPlanPrompt, buildRepairPrompt, buildReviewPrompt } from "../runtime/prompts.js";
+import { buildIssueAnalysisPrompt } from "../runtime/analysis-prompt.js";
 import type { SCMClient } from "../scm/scm.js";
 import { waitForPipeline } from "../stages/ci.js";
 import { commitAndPublish } from "../stages/publish.js";
 import { requiredGatesPassed, verifyGates } from "../stages/verify.js";
-import { beginRevision, createRunState, currentRevision, replayFailedRun, resumeFromHumanInput, type RunState } from "../state/model.js";
+import { beginRevision, createRunState, currentRevision, replayFailedRun, resumeFromHumanInput, retryRun, type RunState } from "../state/model.js";
 import type { RunStateStore } from "../state/store.js";
 import { parseDuration } from "../util/duration.js";
 import { configuredSecrets, redactText } from "../security/redact.js";
@@ -26,6 +28,7 @@ export interface WorkflowDependencies {
   scm: SCMClient;
   store: RunStateStore;
   signal?: AbortSignal;
+  forceRetry?: boolean;
 }
 
 export async function executeWorkflow(item: WorkItem, runId: string, key: string, dependencies: WorkflowDependencies): Promise<RunState> {
@@ -34,6 +37,10 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
   state.humanApprovals ??= [];
   try {
     assertActive(dependencies.signal);
+    if (existing && dependencies.forceRetry) {
+      if (!retryRun(state, item, key)) throw new Error("cannot retry an active AutoDev run");
+      await persist(dependencies.store, state);
+    }
     if (existing && resumeFromHumanInput(state, item, key, dependencies.config.security.human_approval_label)) {
       state.admission = decideAdmission(item, dependencies.config);
       if (!state.admission.accepted) {
@@ -73,10 +80,30 @@ export async function executeWorkflow(item: WorkItem, runId: string, key: string
       await persist(dependencies.store, state);
     }
 
+    if (!state.analysis && !state.plan) {
+      state.currentStage = "analyze";
+      state.analysis = (await dependencies.runtime.analyze(buildIssueAnalysisPrompt(item))).value;
+      await persist(dependencies.store, state);
+      const analysisDecision = decideAnalysisAdmission(state.analysis);
+      if (analysisDecision.verdict === "reject") {
+        state.status = "rejected";
+        state.terminalReason = `repository analysis rejected the Issue: ${analysisDecision.reason}`;
+        await report(dependencies, state);
+        return state;
+      }
+      if (analysisDecision.verdict === "needs_human") {
+        state.status = "needs_human";
+        state.currentStage = "analysis-human-input";
+        state.terminalReason = analysisDecision.reason;
+        await report(dependencies, state);
+        return state;
+      }
+    }
+
     if (!state.plan) {
       assertActive(dependencies.signal);
       state.currentStage = "plan";
-      state.plan = (await dependencies.runtime.plan(buildPlanPrompt(item))).value;
+      state.plan = (await dependencies.runtime.plan(buildPlanPrompt(item, state.analysis))).value;
       if (state.plan.requiresHumanInput) {
         state.currentStage = "plan-human-input";
         state.status = "needs_human";
@@ -221,7 +248,7 @@ async function persist(store: RunStateStore, state: RunState): Promise<RunState>
 async function exhaust(deps: WorkflowDependencies, state: RunState, reason: string): Promise<RunState> { state.status = "budget_exhausted"; state.terminalReason = reason; await report(deps, state); return state; }
 async function report(deps: WorkflowDependencies, state: RunState): Promise<void> {
   const revision = currentRevision(state);
-  const summary = [`<!-- autodev:${state.runId} -->`, `AutoDev run **${state.status}**.`, "", state.terminalReason ?? "", state.plan ? `\nPlan: ${state.plan.summary}` : "", revision?.publication ? `\nChange request: ${revision.publication.changeRequest.url}` : ""].filter(Boolean).join("\n");
+  const summary = [`<!-- autodev:${state.runId} -->`, `AutoDev run **${state.status}**.`, "", state.terminalReason ?? "", state.analysis ? `\nAnalysis (${state.analysis.recommendation}): ${state.analysis.summary}` : "", state.plan ? `\nPlan: ${state.plan.summary}` : "", revision?.publication ? `\nChange request: ${revision.publication.changeRequest.url}` : ""].filter(Boolean).join("\n");
   await deps.scm.commentIssue(state.workItem, summary);
   state.report = { summary, reportedAt: new Date().toISOString() };
   await persist(deps.store, state);

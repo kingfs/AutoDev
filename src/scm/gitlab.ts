@@ -12,6 +12,8 @@ export interface GitLabTargetSnapshot {
   state: string;
   webUrl: string;
   labels: string[];
+  updatedAt?: string;
+  author?: string;
   sourceBranch?: string;
   targetBranch?: string;
   headSha?: string;
@@ -58,8 +60,8 @@ export class GitLabClient implements SCMClient {
 
   async target(projectId: string, kind: "issue" | "merge_request", iid: number): Promise<GitLabTargetSnapshot> {
     if (kind === "issue") {
-      const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[] }>(`/projects/${encodeURIComponent(projectId)}/issues/${iid}`, {}, [200]);
-      return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [] };
+      const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; updated_at?: string; author?: { username?: string } }>(`/projects/${encodeURIComponent(projectId)}/issues/${iid}`, {}, [200]);
+      return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], ...(value.updated_at ? { updatedAt: value.updated_at } : {}), ...(value.author?.username ? { author: value.author.username } : {}) };
     }
     const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; source_branch: string; target_branch: string; sha?: string; diff_refs?: { head_sha?: string } }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}`, {}, [200]);
     const response = await this.#fetch(`${this.#baseUrl}/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/raw_diffs`, { headers: this.#headers() });

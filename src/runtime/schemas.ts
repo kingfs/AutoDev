@@ -39,6 +39,7 @@ export const analysisSchema = z.object({
   validity: z.string(),
   necessity: z.string(),
   feasibility: z.string(),
+  acceptanceCriteria: z.array(z.string()),
   risks: z.array(z.object({ level: risk, area: z.string(), description: z.string() })),
   questions: z.array(z.string()),
   recommendation: z.enum(["proceed", "needs_human", "reject"]),

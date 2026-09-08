@@ -4,12 +4,15 @@ import { buildAnalysisPrompt } from "../runtime/analysis-prompt.js";
 import type { GitLabClient } from "../scm/gitlab.js";
 import type { GitLabCommandEvent } from "../scm/gitlab-events.js";
 import type { CommandStateStore } from "../state/command-store.js";
+import type { WorkItem } from "../domain.js";
+import { decideAnalysisAdmission } from "../policies/analysis.js";
 
 export async function executeGitLabCommand(event: GitLabCommandEvent, dependencies: {
   config: AutoDevConfig;
   scm: GitLabClient;
   runtime: DevelopmentRuntime;
   store: CommandStateStore;
+  runIssue?: (item: WorkItem, retry: boolean) => Promise<{ status: string; reason?: string }>;
 }): Promise<{ status: "ignored" | "completed"; reason: string }> {
   if (event.eventKind === "merge_request" || !event.command || !event.target) return { status: "ignored", reason: "event contains no AutoDev command" };
   const bot = await dependencies.scm.currentUser();
@@ -27,36 +30,60 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
   const claimKey = `${event.deliveryId}:${event.noteId}:${event.command}`;
   if (!await dependencies.store.claim(claimKey)) return { status: "ignored", reason: "duplicate command delivery" };
   const targetKey = `gitlab:${event.project.id}:${event.target.kind}:${event.target.iid}`;
+  const invocationId = `${event.noteId}:${event.command}`;
   const marker = `<!-- autodev-command:${event.noteId} -->`;
 
   if (event.command === "help") {
-    await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\nAutoDev 可用命令：\n\n- \`@autodev help\`\n- \`@autodev status\`\n- \`@autodev analyze\`（只读分析，不修改代码）`);
+    await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\nAutoDev 可用命令：\n\n- \`@autodev help\`\n- \`@autodev status\`\n- \`@autodev analyze\`（只读分析，不修改代码）\n- \`@autodev run\`（仅 Issue，分析通过后实现）\n- \`@autodev retry\`（仅 Issue，重试终态任务）`);
     return { status: "completed", reason: "help replied" };
   }
   if (event.command === "status") {
     const current = await dependencies.store.loadTarget(targetKey);
-    const detail = current ? `最近命令：**${current.command}**\n\n状态：**${current.status}**\n\n更新时间：${current.updatedAt}${current.summary ? `\n\n摘要：${current.summary}` : ""}` : "当前对象没有 AutoDev 命令运行记录。";
+    const invocation = current?.invocations.at(-1);
+    const attempt = invocation?.attempts.at(-1);
+    const detail = invocation && attempt ? `最近命令：**${invocation.command}**\n\n状态：**${attempt.status}**\n\n更新时间：${attempt.finishedAt ?? attempt.startedAt}${attempt.summary ? `\n\n摘要：${attempt.summary}` : ""}` : "当前对象没有 AutoDev 命令运行记录。";
     await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\n${detail}`);
     return { status: "completed", reason: "status replied" };
   }
 
-  await dependencies.store.saveTarget({ targetKey, command: "analyze", status: "running", actor: event.actor.username, updatedAt: new Date().toISOString() });
+  if (event.command === "run" || event.command === "retry") {
+    if (event.target.kind !== "issue") throw new Error(`${event.command} is only supported for Issues in M2`);
+    if (!dependencies.runIssue) throw new Error("Issue workflow runner is not configured");
+    const target = await dependencies.scm.target(event.project.id, "issue", event.target.iid);
+    if (!target.labels.includes(dependencies.config.repository.required_label)) throw new Error(`Issue is missing required label ${dependencies.config.repository.required_label}`);
+    const updatedAt = target.updatedAt ?? new Date().toISOString();
+    const item: WorkItem = { provider: "gitlab", deliveryId: event.deliveryId, actor: event.actor.username, action: "open", revision: updatedAt, repository: { provider: "gitlab", id: event.project.id, fullName: event.project.fullName, cloneUrl: dependencies.config.repository.url, webUrl: target.webUrl, defaultBranch: dependencies.config.repository.default_branch }, issue: { id: String(target.iid), number: target.iid, title: target.title, body: target.description, labels: target.labels, author: target.author ?? event.actor.username, url: target.webUrl, updatedAt } };
+    await dependencies.store.startInvocation(targetKey, invocationId, event.command, event.actor.username);
+    let result;
+    try {
+      result = await dependencies.runIssue(item, event.command === "retry");
+      await dependencies.store.finishInvocation(targetKey, invocationId, "completed", `${result.status}: ${result.reason ?? ""}`);
+    } catch (error) {
+      await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+    await dependencies.scm.commentTarget(event.project.id, "issue", event.target.iid, `${marker}\nAutoDev ${event.command} 结果：**${result.status}**\n\n${result.reason ?? ""}`);
+    return { status: "completed", reason: `${event.command} dispatched` };
+  }
+
+  await dependencies.store.startInvocation(targetKey, invocationId, "analyze", event.actor.username);
   try {
     const target = await dependencies.scm.target(event.project.id, event.target.kind, event.target.iid);
     const analysis = (await dependencies.runtime.analyze(buildAnalysisPrompt(target))).value;
-    const summary = formatAnalysis(analysis);
-    await dependencies.store.saveTarget({ targetKey, command: "analyze", status: "completed", actor: event.actor.username, updatedAt: new Date().toISOString(), summary: analysis.summary });
+    const summary = formatAnalysis(analysis, decideAnalysisAdmission(analysis).verdict);
+    await dependencies.store.finishInvocation(targetKey, invocationId, "completed", analysis.summary);
     await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\n${summary}`);
     return { status: "completed", reason: "analysis replied" };
   } catch (error) {
-    await dependencies.store.saveTarget({ targetKey, command: "analyze", status: "failed", actor: event.actor.username, updatedAt: new Date().toISOString(), summary: error instanceof Error ? error.message : String(error) });
+    await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
     throw error;
   }
 }
 
-function formatAnalysis(value: Awaited<ReturnType<DevelopmentRuntime["analyze"]>>["value"]): string {
+function formatAnalysis(value: Awaited<ReturnType<DevelopmentRuntime["analyze"]>>["value"], verdict: "proceed" | "needs_human" | "reject"): string {
   const evidence = value.codeEvidence.length ? value.codeEvidence.map((item) => `- \`${item.path}\`${item.symbol ? ` · \`${item.symbol}\`` : ""}: ${item.evidence}`).join("\n") : "- 暂无充分的代码证据";
   const risks = value.risks.length ? value.risks.map((item) => `- **${item.level}** · ${item.area}: ${item.description}`).join("\n") : "- 未发现明确风险";
+  const acceptance = value.acceptanceCriteria.length ? value.acceptanceCriteria.map((item) => `- ${item}`).join("\n") : "- 尚未形成可机械验证的验收条件";
   const questions = value.questions.length ? value.questions.map((item) => `- ${item}`).join("\n") : "- 无";
-  return [`## AutoDev 只读分析`, "", `结论建议：**${value.recommendation}**`, "", value.summary, "", "### 代码证据", evidence, "", "### 判断", `- 合理性：${value.validity}`, `- 必要性：${value.necessity}`, `- 可行性：${value.feasibility}`, "", "### 风险", risks, "", "### 待确认", questions, "", "> 此结果是只读分析，不表示 MR 已通过完整合入审查，也不会触发代码修改。"].join("\n");
+  return [`## AutoDev 只读分析`, "", `结论建议：**${verdict}**`, "", value.summary, "", "### 代码证据", evidence, "", "### 判断", `- 合理性：${value.validity}`, `- 必要性：${value.necessity}`, `- 可行性：${value.feasibility}`, "", "### 验收条件", acceptance, "", "### 风险", risks, "", "### 待确认", questions, "", "> 此结果是只读分析，不表示 MR 已通过完整合入审查，也不会触发代码修改。"].join("\n");
 }

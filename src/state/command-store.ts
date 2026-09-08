@@ -4,12 +4,12 @@ import path from "node:path";
 
 export interface CommandTargetState {
   targetKey: string;
-  command: string;
-  status: "running" | "completed" | "failed";
-  actor: string;
   updatedAt: string;
-  summary?: string;
+  invocations: CommandInvocation[];
 }
+
+export interface CommandInvocation { id: string; command: string; actor: string; createdAt: string; attempts: CommandAttempt[] }
+export interface CommandAttempt { number: number; status: "running" | "completed" | "failed"; startedAt: string; finishedAt?: string; summary?: string }
 
 export class CommandStateStore {
   readonly #root: string;
@@ -39,6 +39,27 @@ export class CommandStateStore {
     const temporary = `${filename}.${process.pid}.tmp`;
     await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
     await rename(temporary, filename);
+  }
+
+  async startInvocation(targetKey: string, invocationId: string, command: string, actor: string): Promise<CommandTargetState> {
+    const now = new Date().toISOString();
+    const state = await this.loadTarget(targetKey) ?? { targetKey, updatedAt: now, invocations: [] };
+    state.invocations.push({ id: invocationId, command, actor, createdAt: now, attempts: [{ number: 1, status: "running", startedAt: now }] });
+    state.updatedAt = now;
+    await this.saveTarget(state);
+    return state;
+  }
+
+  async finishInvocation(targetKey: string, invocationId: string, status: "completed" | "failed", summary: string): Promise<void> {
+    const state = await this.loadTarget(targetKey);
+    const invocation = state?.invocations.find((entry) => entry.id === invocationId);
+    const attempt = invocation?.attempts.at(-1);
+    if (!state || !attempt) throw new Error(`command invocation ${invocationId} is unavailable`);
+    attempt.status = status;
+    attempt.summary = summary;
+    attempt.finishedAt = new Date().toISOString();
+    state.updatedAt = attempt.finishedAt;
+    await this.saveTarget(state);
   }
 
   #targetFile(targetKey: string): string { return path.join(this.#root, "targets", `${hash(targetKey)}.json`); }

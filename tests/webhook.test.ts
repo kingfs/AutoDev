@@ -42,6 +42,8 @@ describe("GitLab command events", () => {
 
   it("supports slash commands and makes a bare mention safe help", () => {
     expect(parseAutoDevCommand("/autodev status")).toBe("status");
+    expect(parseAutoDevCommand("@autodev run")).toBe("run");
+    expect(parseAutoDevCommand("@autodev retry")).toBe("retry");
     expect(parseAutoDevCommand("@autodev")).toBe("help");
     expect(parseAutoDevCommand("ordinary comment")).toBeNull();
   });

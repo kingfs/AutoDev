@@ -6,11 +6,11 @@ import type { GitLabClient } from "../src/scm/gitlab.js";
 import type { CommandStateStore, CommandTargetState } from "../src/state/command-store.js";
 
 const config = {
-  repository: { allowlist: ["group/repo"] },
+  repository: { allowlist: ["group/repo"], required_label: "ai-ready", url: "https://git/repo.git", default_branch: "main" },
   security: { allowed_actors: [], gitlab_min_access_level: 30 },
 } as unknown as AutoDevConfig;
 
-function event(command: "help" | "status" | "analyze" = "help") {
+function event(command: "help" | "status" | "analyze" | "run" | "retry" = "help") {
   return { deliveryId: "delivery", eventKind: "note" as const, actor: { id: 7, username: "alice" }, project: { id: "1", fullName: "group/repo" }, target: { kind: "issue" as const, iid: 3 }, noteId: 9, command };
 }
 
@@ -20,18 +20,25 @@ function dependencies() {
     currentUser: vi.fn().mockResolvedValue({ id: 99, username: "bot", bot: true }),
     project: vi.fn().mockResolvedValue({ id: 1, path_with_namespace: "group/repo" }),
     memberAccess: vi.fn().mockResolvedValue(30),
-    target: vi.fn().mockResolvedValue({ kind: "issue", iid: 3, title: "Bug", description: "Broken", state: "opened", webUrl: "https://git/issue/3", labels: [] }),
+    target: vi.fn().mockResolvedValue({ kind: "issue", iid: 3, title: "Bug", description: "Broken", state: "opened", webUrl: "https://git/issue/3", labels: ["ai-ready"], updatedAt: "2026-09-08T00:00:00Z", author: "reporter" }),
     commentTarget: vi.fn().mockResolvedValue(undefined),
   } as unknown as GitLabClient;
   const store = {
     claim: vi.fn().mockResolvedValue(true),
     loadTarget: vi.fn().mockImplementation(async () => targetState),
     saveTarget: vi.fn().mockImplementation(async (state: CommandTargetState) => { targetState = state; }),
+    startInvocation: vi.fn().mockImplementation(async (targetKey: string, id: string, command: string, actor: string) => {
+      const now = new Date().toISOString(); targetState = { targetKey, updatedAt: now, invocations: [{ id, command, actor, createdAt: now, attempts: [{ number: 1, status: "running", startedAt: now }] }] }; return targetState;
+    }),
+    finishInvocation: vi.fn().mockImplementation(async (_targetKey: string, id: string, status: "completed" | "failed", summary: string) => {
+      const attempt = targetState?.invocations.find((entry) => entry.id === id)?.attempts.at(-1); if (attempt) { attempt.status = status; attempt.summary = summary; }
+    }),
   } as unknown as CommandStateStore;
   const runtime = {
-    analyze: vi.fn().mockResolvedValue({ value: { summary: "Evidence found", codeEvidence: [{ path: "src/a.ts", symbol: "run", evidence: "missing check" }], validity: "valid", necessity: "needed", feasibility: "feasible", risks: [], questions: [], recommendation: "proceed" }, threadId: "a", transcript: "" }),
+    analyze: vi.fn().mockResolvedValue({ value: { summary: "Evidence found", codeEvidence: [{ path: "src/a.ts", symbol: "run", evidence: "missing check" }], validity: "valid", necessity: "needed", feasibility: "feasible", acceptanceCriteria: ["check passes"], risks: [], questions: [], recommendation: "proceed" }, threadId: "a", transcript: "" }),
   } as unknown as DevelopmentRuntime;
-  return { config, scm, store, runtime };
+  const runIssue = vi.fn().mockResolvedValue({ status: "completed", reason: "done" });
+  return { config, scm, store, runtime, runIssue };
 }
 
 describe("GitLab command controller", () => {
@@ -46,8 +53,23 @@ describe("GitLab command controller", () => {
     const deps = dependencies();
     await expect(executeGitLabCommand(event("analyze"), deps)).resolves.toEqual({ status: "completed", reason: "analysis replied" });
     expect(deps.runtime.analyze).toHaveBeenCalledOnce();
-    expect(deps.store.saveTarget).toHaveBeenLastCalledWith(expect.objectContaining({ status: "completed", summary: "Evidence found" }));
+    expect(deps.store.finishInvocation).toHaveBeenLastCalledWith(expect.any(String), "9:analyze", "completed", "Evidence found");
     expect(deps.scm.commentTarget).toHaveBeenCalledWith("1", "issue", 3, expect.stringContaining("结论建议：**proceed**"));
+  });
+
+  it("dispatches an authoritative Issue to the workflow and records an invocation", async () => {
+    const deps = dependencies();
+    await expect(executeGitLabCommand(event("run"), deps)).resolves.toEqual({ status: "completed", reason: "run dispatched" });
+    expect(deps.runIssue).toHaveBeenCalledWith(expect.objectContaining({ issue: expect.objectContaining({ author: "reporter", labels: ["ai-ready"] }) }), false);
+    expect(deps.store.startInvocation).toHaveBeenCalledWith("gitlab:1:issue:3", "9:run", "run", "alice");
+    expect(deps.store.finishInvocation).toHaveBeenCalledWith("gitlab:1:issue:3", "9:run", "completed", "completed: done");
+  });
+
+  it("marks retry as an explicit workflow retry", async () => {
+    const deps = dependencies();
+    await executeGitLabCommand(event("retry"), deps);
+    expect(deps.runIssue).toHaveBeenCalledWith(expect.any(Object), true);
+    expect(deps.store.startInvocation).toHaveBeenCalledWith("gitlab:1:issue:3", "9:retry", "retry", "alice");
   });
 
   it("ignores bot events and duplicate deliveries", async () => {

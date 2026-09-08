@@ -286,8 +286,10 @@ export AUTODEV_WEBHOOK_TOKEN='<使用密码生成器生成的随机值>'
 5. 根据部署情况启用 SSL verification；
 6. 保存后使用 GitLab 的 Test 功能发送 Issue Hook。
 
-当前评论命令支持 `@autodev help`、`@autodev status` 和只读的
-`@autodev analyze`。若使用 Project Access Token，GitLab 创建的真实 bot username
+当前评论命令支持 `@autodev help`、`@autodev status`、只读的
+`@autodev analyze`，以及 Issue 专用的 `@autodev run`、`@autodev retry`。
+`run` 会先执行代码事实分析，只有结论为 `proceed` 才进入计划和实现；`retry` 会重新
+执行终态任务的准入，并按需要重新分析。若使用 Project Access Token，GitLab 创建的真实 bot username
 并不是 `autodev`；AutoDev 仍会解析上述命令文本，也支持 `/autodev` 前缀。
 
 ### GitHub 接入
