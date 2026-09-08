@@ -8,9 +8,12 @@ export async function prepareMergeRequestWorkspace(workspace: string, mr: GitLab
   if (status.stdout.trim()) throw new Error("workspace must be clean before merge request review");
   const reviewRef = `refs/autodev/merge-requests/${mr.iid}/head`;
   await runChecked("git", ["fetch", "--prune", "origin", `refs/heads/${mr.targetBranch}:refs/remotes/origin/${mr.targetBranch}`, `refs/merge-requests/${mr.iid}/head:${reviewRef}`], { cwd: workspace, timeoutMs: 120_000 });
+  const shallow = (await runChecked("git", ["rev-parse", "--is-shallow-repository"], { cwd: workspace })).stdout.trim() === "true";
+  if (shallow) await runChecked("git", ["fetch", "--unshallow", "--no-tags", "origin"], { cwd: workspace, timeoutMs: 300_000 });
   const fetchedHead = (await runChecked("git", ["rev-parse", reviewRef], { cwd: workspace })).stdout.trim();
   if (fetchedHead !== mr.headSha) throw new Error(`merge request head moved from ${mr.headSha} to ${fetchedHead}`);
   const baseSha = (await runChecked("git", ["rev-parse", `origin/${mr.targetBranch}`], { cwd: workspace })).stdout.trim();
+  await runChecked("git", ["merge-base", baseSha, mr.headSha], { cwd: workspace });
   await runChecked("git", ["checkout", "--detach", mr.headSha], { cwd: workspace });
   const changed = (await runChecked("git", ["diff", "--name-only", `${baseSha}...${mr.headSha}`], { cwd: workspace })).stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return { baseBranch: mr.targetBranch, baseSha, taskBranch: `mr-${mr.iid}`, headSha: mr.headSha, changedFiles: [...new Set(changed)].sort(), clean: true };

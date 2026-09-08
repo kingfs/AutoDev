@@ -54,4 +54,16 @@ describe("Merge Request review", () => {
     const result = await reviewMergeRequest({ kind: "merge_request", iid: 8, title: "Feature", description: "", state: "opened", webUrl: "https://git/mr/8", labels: [], sourceBranch: "feature", targetBranch: "main", headSha, diff: "diff" }, { config, workspace, artifactRoot: path.join(root, "artifacts"), runtime, scm, projectId: "1" });
     expect(result.status).toBe("merge_ready"); expect(result.revision).toBe(headSha); expect(scm.commentTarget).toHaveBeenCalledWith("1", "merge_request", 8, expect.stringContaining(`审查 SHA：\`${headSha}\``));
   });
+
+  it("deepens a shallow workspace before computing the MR merge-base diff", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-mr-shallow-")); const bare = path.join(root, "origin.git"); const author = path.join(root, "author"); const workspace = path.join(root, "workspace");
+    await runChecked("git", ["init", "--bare", "-b", "main", bare], { cwd: root }); await runChecked("git", ["clone", bare, author], { cwd: root });
+    await runChecked("git", ["config", "user.name", "Test"], { cwd: author }); await runChecked("git", ["config", "user.email", "test@example.test"], { cwd: author });
+    await runChecked("bash", ["-lc", "echo base > file"], { cwd: author }); await runChecked("git", ["add", "."], { cwd: author }); await runChecked("git", ["commit", "-m", "base"], { cwd: author }); await runChecked("git", ["checkout", "-b", "feature"], { cwd: author }); await runChecked("bash", ["-lc", "echo feature >> file"], { cwd: author }); await runChecked("git", ["commit", "-am", "feature"], { cwd: author });
+    const headSha = (await runChecked("git", ["rev-parse", "HEAD"], { cwd: author })).stdout.trim(); await runChecked("git", ["push", "origin", `HEAD:refs/merge-requests/2/head`], { cwd: author }); await runChecked("git", ["checkout", "main"], { cwd: author }); await runChecked("bash", ["-lc", "echo main > other"], { cwd: author }); await runChecked("git", ["add", "."], { cwd: author }); await runChecked("git", ["commit", "-m", "main moves"], { cwd: author }); await runChecked("git", ["push", "origin", "main"], { cwd: author });
+    await runChecked("git", ["clone", "--depth=1", `file://${bare}`, workspace], { cwd: root });
+    const { prepareMergeRequestWorkspace } = await import("../src/git/merge-request-workspace.js");
+    const checkpoint = await prepareMergeRequestWorkspace(workspace, { kind: "merge_request", iid: 2, title: "MR", description: "", state: "opened", webUrl: "", labels: [], targetBranch: "main", headSha });
+    expect(checkpoint.changedFiles).toEqual(["file"]); expect((await runChecked("git", ["rev-parse", "--is-shallow-repository"], { cwd: workspace })).stdout.trim()).toBe("false");
+  });
 });
