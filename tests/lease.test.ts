@@ -23,4 +23,11 @@ describe("repository lease", () => {
     await manager.acquire("repo", "old", 10, new Date(0));
     expect((await manager.acquire("repo", "new", 10, new Date(20)))?.owner).toBe("new");
   });
+
+  it("waits for a busy lease and reports its owner when unavailable", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-lease-"));
+    const manager = new FileLeaseManager(root);
+    await manager.acquire("repo", "old", 60_000);
+    await expect(manager.acquireWithRetry("repo", "new", 20, { waitMs: 5, pollMs: 1 })).rejects.toThrow(/owner=old/);
+  });
 });

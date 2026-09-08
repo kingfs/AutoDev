@@ -39,6 +39,20 @@ export class FileLeaseManager {
     return null;
   }
 
+  async acquireWithRetry(key: string, owner: string, ttlMs: number, options: { waitMs: number; pollMs: number } = { waitMs: 120_000, pollMs: 2_000 }): Promise<Lease> {
+    const deadline = Date.now() + options.waitMs;
+    let last: Lease | null = null;
+    do {
+      const lease = await this.acquire(key, owner, ttlMs);
+      if (lease) return lease;
+      last = await this.read(key);
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(options.pollMs, Math.max(1, deadline - Date.now()))));
+    } while (Date.now() < deadline);
+    const detail = last ? ` (owner=${last.owner}, acquiredAt=${last.acquiredAt}, expiresAt=${last.expiresAt})` : "";
+    throw new Error(`repository lease is busy after ${options.waitMs}ms${detail}`);
+  }
+
   async release(lease: Lease): Promise<void> {
     const current = await this.read(lease.key);
     if (current?.owner === lease.owner) await rm(this.#filename(lease.key), { force: true });
