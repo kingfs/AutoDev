@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeWebhook } from "../src/scm/webhook.js";
-import { gitLabEventKind, normalizeGitLabCommandEvent, parseAutoDevCommand } from "../src/scm/gitlab-events.js";
+import { gitLabEventKind, isAutomaticGitLabIssueEvent, normalizeGitLabCommandEvent, parseAutoDevCommand } from "../src/scm/gitlab-events.js";
 
 describe("webhook normalization", () => {
   it("normalizes a GitLab issue hook", () => {
@@ -64,5 +64,12 @@ describe("GitLab command events", () => {
     expect(gitLabEventKind({ object_kind: "push" })).toBe("push");
     expect(gitLabEventKind({ object_kind: "note" })).toBe("note");
     expect(gitLabEventKind({ object_kind: "issue" })).toBe("issue");
+  });
+
+  it("admits only new or reopened Issues to the automatic workflow", () => {
+    expect(isAutomaticGitLabIssueEvent({ object_kind: "issue", object_attributes: { action: "open" } })).toBe(true);
+    expect(isAutomaticGitLabIssueEvent({ object_kind: "issue", object_attributes: { action: "reopen" } })).toBe(true);
+    expect(isAutomaticGitLabIssueEvent({ object_kind: "issue", object_attributes: { action: "update" } })).toBe(false);
+    expect(isAutomaticGitLabIssueEvent({ object_kind: "issue", object_attributes: { action: "close" } })).toBe(false);
   });
 });

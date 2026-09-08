@@ -61,5 +61,12 @@ export function gitLabEventKind(body: unknown): string {
   return String(value.object_kind ?? value.event_type ?? "").toLowerCase();
 }
 
+export function isAutomaticGitLabIssueEvent(body: unknown): boolean {
+  const payload = object(body);
+  if (gitLabEventKind(payload) !== "issue") return false;
+  const action = String(object(payload.object_attributes).action ?? "").toLowerCase();
+  return action === "open" || action === "reopen";
+}
+
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24); }

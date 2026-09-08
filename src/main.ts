@@ -8,7 +8,7 @@ import { normalizeWebhook } from "./scm/webhook.js";
 import { FileRunStateStore } from "./state/store.js";
 import { FileLeaseManager } from "./state/lease.js";
 import { parseDuration } from "./util/duration.js";
-import { gitLabEventKind, normalizeGitLabCommandEvent } from "./scm/gitlab-events.js";
+import { gitLabEventKind, isAutomaticGitLabIssueEvent, normalizeGitLabCommandEvent } from "./scm/gitlab-events.js";
 import { GitLabClient } from "./scm/gitlab.js";
 import { CommandStateStore } from "./state/command-store.js";
 import { executeGitLabCommand } from "./controller/command.js";
@@ -50,6 +50,10 @@ async function main(): Promise<void> {
     const eventKind = gitLabEventKind(body);
     if (eventKind && eventKind !== "issue") {
       console.log(`__AUTODEV_COMMAND_RESULT__${JSON.stringify({ status: "ignored", reason: `GitLab ${eventKind} event contains no actionable AutoDev command` })}`);
+      return;
+    }
+    if (eventKind === "issue" && !isAutomaticGitLabIssueEvent(body)) {
+      console.log(`__AUTODEV_COMMAND_RESULT__${JSON.stringify({ status: "ignored", reason: "GitLab Issue update requires an explicit @autodev command" })}`);
       return;
     }
   }
