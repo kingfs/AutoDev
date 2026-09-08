@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export type AutoDevCommand = "help" | "status" | "analyze" | "run" | "retry";
+export type AutoDevCommand = "help" | "status" | "analyze" | "run" | "retry" | "review";
 export type GitLabTargetKind = "issue" | "merge_request";
 
 export interface GitLabCommandEvent {
@@ -11,6 +11,7 @@ export interface GitLabCommandEvent {
   target?: { kind: GitLabTargetKind; iid: number };
   noteId?: number;
   command?: AutoDevCommand;
+  action?: string;
 }
 
 export function normalizeGitLabCommandEvent(body: unknown, headers: Record<string, string | undefined>): GitLabCommandEvent | null {
@@ -43,7 +44,7 @@ export function normalizeGitLabCommandEvent(body: unknown, headers: Record<strin
   if (eventKind === "merge_request") {
     const iid = Number(attributes.iid);
     if (!iid) throw new Error("GitLab merge request event is missing iid");
-    return { ...base, eventKind: "merge_request", target: { kind: "merge_request", iid } };
+    return { ...base, eventKind: "merge_request", target: { kind: "merge_request", iid }, action: String(attributes.action ?? "update") };
   }
   return null;
 }
@@ -52,7 +53,7 @@ export function parseAutoDevCommand(note: string): AutoDevCommand | null {
   const match = /(?:^|\s)(?:@autodev|\/autodev)(?:\s+([a-z-]+))?(?=\s|$)/i.exec(note);
   if (!match) return null;
   const command = (match[1] ?? "help").toLowerCase();
-  return ["help", "status", "analyze", "run", "retry"].includes(command) ? command as AutoDevCommand : "help";
+  return ["help", "status", "analyze", "run", "retry", "review"].includes(command) ? command as AutoDevCommand : "help";
 }
 
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

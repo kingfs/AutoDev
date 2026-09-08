@@ -1,0 +1,31 @@
+import { mkdtemp } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { autoDevConfigSchema } from "../src/config/schema.js";
+import { decideMergeReviewVerdict, reviewMergeRequest } from "../src/controller/merge-request-review.js";
+import { runChecked } from "../src/git/command.js";
+import type { DevelopmentRuntime } from "../src/runtime/runtime.js";
+import type { GitLabClient } from "../src/scm/gitlab.js";
+
+describe("Merge Request review", () => {
+  it("makes required gate failures blocking regardless of model output", () => {
+    const gates = [{ id: "test", type: "command" as const, description: "test", required: true, source: "repository" as const }];
+    const review = { summary: "looks fine", coreChanges: [], logicClosure: "closed", requirementCoverage: "covered", findings: [], residualRisks: [], recommendedVerdict: "merge_ready" as const };
+    expect(decideMergeReviewVerdict(gates, [{ gateId: "test", passed: false, summary: "failed" }], review)).toBe("blocking");
+  });
+
+  it("checks out the authoritative SHA, runs gates and publishes a merge-ready comment", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "autodev-mr-")); const bare = path.join(root, "origin.git"); const author = path.join(root, "author"); const workspace = path.join(root, "workspace");
+    await runChecked("git", ["init", "--bare", "-b", "main", bare], { cwd: root }); await runChecked("git", ["clone", bare, author], { cwd: root });
+    await runChecked("git", ["config", "user.name", "Test"], { cwd: author }); await runChecked("git", ["config", "user.email", "test@example.test"], { cwd: author });
+    await runChecked("bash", ["-lc", "echo base > README.md"], { cwd: author }); await runChecked("git", ["add", "."], { cwd: author }); await runChecked("git", ["commit", "-m", "base"], { cwd: author }); await runChecked("git", ["push", "origin", "main"], { cwd: author });
+    await runChecked("git", ["checkout", "-b", "feature"], { cwd: author }); await runChecked("bash", ["-lc", "echo good > feature.txt"], { cwd: author }); await runChecked("git", ["add", "."], { cwd: author }); await runChecked("git", ["commit", "-m", "feature"], { cwd: author });
+    const headSha = (await runChecked("git", ["rev-parse", "HEAD"], { cwd: author })).stdout.trim(); await runChecked("git", ["push", "origin", `HEAD:refs/merge-requests/8/head`], { cwd: author }); await runChecked("git", ["clone", bare, workspace], { cwd: root });
+    const config = autoDevConfigSchema.parse({ repository: { provider: "gitlab", url: `file://${bare}` }, automation: {}, verification: { commands: [{ id: "content", command: "grep -q good feature.txt" }] }, security: {} });
+    const runtime = { reviewMergeRequest: vi.fn().mockResolvedValue({ value: { summary: "safe bounded change", coreChanges: ["adds feature"], logicClosure: "closed", requirementCoverage: "covered", findings: [], residualRisks: [], recommendedVerdict: "merge_ready" }, threadId: "r", transcript: "" }) } as unknown as DevelopmentRuntime;
+    const scm = { commentTarget: vi.fn().mockResolvedValue(undefined) } as unknown as GitLabClient;
+    const result = await reviewMergeRequest({ kind: "merge_request", iid: 8, title: "Feature", description: "", state: "opened", webUrl: "https://git/mr/8", labels: [], sourceBranch: "feature", targetBranch: "main", headSha, diff: "diff" }, { config, workspace, artifactRoot: path.join(root, "artifacts"), runtime, scm, projectId: "1" });
+    expect(result.status).toBe("merge_ready"); expect(result.revision).toBe(headSha); expect(scm.commentTarget).toHaveBeenCalledWith("1", "merge_request", 8, expect.stringContaining(`审查 SHA：\`${headSha}\``));
+  });
+});

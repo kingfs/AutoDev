@@ -1,7 +1,7 @@
 import type { AutoDevConfig } from "../config/schema.js";
 import type { DevelopmentRuntime } from "../runtime/runtime.js";
 import { buildAnalysisPrompt } from "../runtime/analysis-prompt.js";
-import type { GitLabClient } from "../scm/gitlab.js";
+import type { GitLabClient, GitLabTargetSnapshot } from "../scm/gitlab.js";
 import type { GitLabCommandEvent } from "../scm/gitlab-events.js";
 import type { CommandStateStore } from "../state/command-store.js";
 import type { WorkItem } from "../domain.js";
@@ -13,8 +13,11 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
   runtime: DevelopmentRuntime;
   store: CommandStateStore;
   runIssue?: (item: WorkItem, retry: boolean) => Promise<{ status: string; reason?: string }>;
+  reviewMergeRequest?: (mr: GitLabTargetSnapshot) => Promise<{ status: string; revision: string; summary: string }>;
 }): Promise<{ status: "ignored" | "completed"; reason: string }> {
-  if (event.eventKind === "merge_request" || !event.command || !event.target) return { status: "ignored", reason: "event contains no AutoDev command" };
+  if (!event.target || (event.eventKind === "note" && !event.command)) return { status: "ignored", reason: "event contains no AutoDev command" };
+  if (event.eventKind === "merge_request" && !["open", "update", "reopen"].includes(event.action ?? "update")) return { status: "ignored", reason: `merge request action ${event.action} is not reviewable` };
+  const command = event.eventKind === "merge_request" ? "review" : event.command!;
   const bot = await dependencies.scm.currentUser();
   if (event.actor.id === bot.id || event.actor.username === bot.username) return { status: "ignored", reason: "ignored AutoDev bot event" };
 
@@ -27,17 +30,17 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
   const access = await dependencies.scm.memberAccess(event.project.id, event.actor.id);
   if (access < dependencies.config.security.gitlab_min_access_level) throw new Error(`event actor access level ${access} is below required ${dependencies.config.security.gitlab_min_access_level}`);
 
-  const claimKey = `${event.deliveryId}:${event.noteId}:${event.command}`;
+  const claimKey = `${event.deliveryId}:${event.noteId ?? "event"}:${command}`;
   if (!await dependencies.store.claim(claimKey)) return { status: "ignored", reason: "duplicate command delivery" };
   const targetKey = `gitlab:${event.project.id}:${event.target.kind}:${event.target.iid}`;
-  const invocationId = `${event.noteId}:${event.command}`;
-  const marker = `<!-- autodev-command:${event.noteId} -->`;
+  const invocationId = `${event.noteId ?? event.deliveryId}:${command}`;
+  const marker = `<!-- autodev-command:${event.noteId ?? event.deliveryId} -->`;
 
-  if (event.command === "help") {
-    await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\nAutoDev 可用命令：\n\n- \`@autodev help\`\n- \`@autodev status\`\n- \`@autodev analyze\`（只读分析，不修改代码）\n- \`@autodev run\`（仅 Issue，分析通过后实现）\n- \`@autodev retry\`（仅 Issue，重试终态任务）`);
+  if (command === "help") {
+    await dependencies.scm.commentTarget(event.project.id, event.target.kind, event.target.iid, `${marker}\nAutoDev 可用命令：\n\n- \`@autodev help\`\n- \`@autodev status\`\n- \`@autodev analyze\`（只读分析，不修改代码）\n- \`@autodev run\`（仅 Issue，分析通过后实现）\n- \`@autodev retry\`（仅 Issue，重试终态任务）\n- \`@autodev review\`（仅 MR，审查当前精确 SHA）`);
     return { status: "completed", reason: "help replied" };
   }
-  if (event.command === "status") {
+  if (command === "status") {
     const current = await dependencies.store.loadTarget(targetKey);
     const invocation = current?.invocations.at(-1);
     const attempt = invocation?.attempts.at(-1);
@@ -46,24 +49,43 @@ export async function executeGitLabCommand(event: GitLabCommandEvent, dependenci
     return { status: "completed", reason: "status replied" };
   }
 
-  if (event.command === "run" || event.command === "retry") {
-    if (event.target.kind !== "issue") throw new Error(`${event.command} is only supported for Issues in M2`);
+  if (command === "run" || command === "retry") {
+    if (event.target.kind !== "issue") throw new Error(`${command} is only supported for Issues in M2`);
     if (!dependencies.runIssue) throw new Error("Issue workflow runner is not configured");
     const target = await dependencies.scm.target(event.project.id, "issue", event.target.iid);
     if (!target.labels.includes(dependencies.config.repository.required_label)) throw new Error(`Issue is missing required label ${dependencies.config.repository.required_label}`);
     const updatedAt = target.updatedAt ?? new Date().toISOString();
     const item: WorkItem = { provider: "gitlab", deliveryId: event.deliveryId, actor: event.actor.username, action: "open", revision: updatedAt, repository: { provider: "gitlab", id: event.project.id, fullName: event.project.fullName, cloneUrl: dependencies.config.repository.url, webUrl: target.webUrl, defaultBranch: dependencies.config.repository.default_branch }, issue: { id: String(target.iid), number: target.iid, title: target.title, body: target.description, labels: target.labels, author: target.author ?? event.actor.username, url: target.webUrl, updatedAt } };
-    await dependencies.store.startInvocation(targetKey, invocationId, event.command, event.actor.username);
+    await dependencies.store.startInvocation(targetKey, invocationId, command, event.actor.username);
     let result;
     try {
-      result = await dependencies.runIssue(item, event.command === "retry");
+      result = await dependencies.runIssue(item, command === "retry");
       await dependencies.store.finishInvocation(targetKey, invocationId, "completed", `${result.status}: ${result.reason ?? ""}`);
     } catch (error) {
       await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
       throw error;
     }
-    await dependencies.scm.commentTarget(event.project.id, "issue", event.target.iid, `${marker}\nAutoDev ${event.command} 结果：**${result.status}**\n\n${result.reason ?? ""}`);
-    return { status: "completed", reason: `${event.command} dispatched` };
+    await dependencies.scm.commentTarget(event.project.id, "issue", event.target.iid, `${marker}\nAutoDev ${command} 结果：**${result.status}**\n\n${result.reason ?? ""}`);
+    return { status: "completed", reason: `${command} dispatched` };
+  }
+
+  if (command === "review") {
+    if (event.target.kind !== "merge_request") throw new Error("review is only supported for Merge Requests");
+    if (!dependencies.reviewMergeRequest) throw new Error("Merge Request reviewer is not configured");
+    const mr = await dependencies.scm.target(event.project.id, "merge_request", event.target.iid);
+    if (!mr.headSha) throw new Error("Merge Request has no authoritative head SHA");
+    const current = await dependencies.store.loadTarget(targetKey);
+    if (event.eventKind === "merge_request" && current?.invocations.some((entry) => entry.command === "review" && entry.revision === mr.headSha && entry.attempts.at(-1)?.status === "completed")) return { status: "ignored", reason: "merge request revision already reviewed" };
+    await dependencies.store.startInvocation(targetKey, invocationId, "review", event.actor.username, mr.headSha);
+    let result;
+    try {
+      result = await dependencies.reviewMergeRequest(mr);
+      await dependencies.store.finishInvocation(targetKey, invocationId, "completed", result.summary);
+    } catch (error) {
+      await dependencies.store.finishInvocation(targetKey, invocationId, "failed", error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+    return { status: "completed", reason: `review ${result.status}` };
   }
 
   await dependencies.store.startInvocation(targetKey, invocationId, "analyze", event.actor.username);

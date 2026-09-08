@@ -29,9 +29,11 @@ describe("SCM comments", () => {
   it("reads an MR and its raw diff at the authoritative target", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(response({ iid: 8, title: "Change", state: "opened", web_url: "https://git/mr/8", source_branch: "feature", target_branch: "main", diff_refs: { head_sha: "abc" } }))
-      .mockResolvedValueOnce(new Response("diff --git a/a b/a", { status: 200 }));
+      .mockResolvedValueOnce(new Response("diff --git a/a b/a", { status: 200 }))
+      .mockResolvedValueOnce(response([{ id: "abc", title: "change", author_name: "Alice" }]))
+      .mockResolvedValueOnce(response([{ id: "discussion", notes: [{ author: { username: "bob" }, body: "question", resolved: false }] }]));
     const client = new GitLabClient({ baseUrl: "https://gitlab.example", token: "secret", fetcher });
-    await expect(client.target("1", "merge_request", 8)).resolves.toMatchObject({ kind: "merge_request", headSha: "abc", diff: expect.stringContaining("diff --git") });
+    await expect(client.target("1", "merge_request", 8)).resolves.toMatchObject({ kind: "merge_request", headSha: "abc", diff: expect.stringContaining("diff --git"), commits: [{ id: "abc" }], discussions: [{ id: "discussion" }] });
   });
 
   it("updates an existing GitLab AutoDev comment", async () => {

@@ -18,6 +18,8 @@ export interface GitLabTargetSnapshot {
   targetBranch?: string;
   headSha?: string;
   diff?: string;
+  commits?: Array<{ id: string; title: string; author: string }>;
+  discussions?: Array<{ id: string; notes: Array<{ author: string; body: string; resolved?: boolean }> }>;
 }
 
 export class GitLabClient implements SCMClient {
@@ -66,8 +68,10 @@ export class GitLabClient implements SCMClient {
     const value = await this.#request<{ iid: number; title: string; description?: string; state: string; web_url: string; labels?: string[]; source_branch: string; target_branch: string; sha?: string; diff_refs?: { head_sha?: string } }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}`, {}, [200]);
     const response = await this.#fetch(`${this.#baseUrl}/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/raw_diffs`, { headers: this.#headers() });
     if (!response.ok) throw new Error(`GET GitLab MR raw diff failed: HTTP ${response.status}`);
+    const commits = await this.#paginate<{ id: string; title: string; author_name: string }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/commits`);
+    const discussions = await this.#paginate<{ id: string; notes: Array<{ author?: { username?: string }; body: string; resolved?: boolean }> }>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${iid}/discussions`);
     const headSha = value.diff_refs?.head_sha ?? value.sha;
-    return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], sourceBranch: value.source_branch, targetBranch: value.target_branch, ...(headSha ? { headSha } : {}), diff: (await response.text()).slice(0, 250_000) };
+    return { kind, iid: value.iid, title: value.title, description: value.description ?? "", state: value.state, webUrl: value.web_url, labels: value.labels ?? [], sourceBranch: value.source_branch, targetBranch: value.target_branch, ...(headSha ? { headSha } : {}), diff: (await response.text()).slice(0, 250_000), commits: commits.map((commit) => ({ id: commit.id, title: commit.title, author: commit.author_name })), discussions: discussions.map((discussion) => ({ id: discussion.id, notes: discussion.notes.map((note) => ({ author: note.author?.username ?? "unknown", body: note.body, ...(note.resolved === undefined ? {} : { resolved: note.resolved }) })) })) };
   }
 
   async commentTarget(projectId: string, kind: "issue" | "merge_request", iid: number, body: string): Promise<void> {
@@ -138,7 +142,7 @@ export class GitLabClient implements SCMClient {
   }
 }
 
-function markerFrom(body: string): string | null { return body.match(/<!-- autodev(?:-command)?:[^>]+ -->/)?.[0] ?? null; }
+function markerFrom(body: string): string | null { return body.match(/<!-- autodev[^:>]*:[^>]+ -->/)?.[0] ?? null; }
 
 function mapMR(value: GitLabMR): ChangeRequest {
   return { id: String(value.id), number: value.iid, url: value.web_url, sourceBranch: value.source_branch, targetBranch: value.target_branch, state: value.state === "merged" ? "merged" : value.state === "closed" ? "closed" : "open", draft: Boolean(value.draft ?? value.work_in_progress) };

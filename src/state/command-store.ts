@@ -8,7 +8,7 @@ export interface CommandTargetState {
   invocations: CommandInvocation[];
 }
 
-export interface CommandInvocation { id: string; command: string; actor: string; createdAt: string; attempts: CommandAttempt[] }
+export interface CommandInvocation { id: string; command: string; actor: string; createdAt: string; revision?: string; attempts: CommandAttempt[] }
 export interface CommandAttempt { number: number; status: "running" | "completed" | "failed"; startedAt: string; finishedAt?: string; summary?: string }
 
 export class CommandStateStore {
@@ -41,10 +41,10 @@ export class CommandStateStore {
     await rename(temporary, filename);
   }
 
-  async startInvocation(targetKey: string, invocationId: string, command: string, actor: string): Promise<CommandTargetState> {
+  async startInvocation(targetKey: string, invocationId: string, command: string, actor: string, revision?: string): Promise<CommandTargetState> {
     const now = new Date().toISOString();
     const state = await this.loadTarget(targetKey) ?? { targetKey, updatedAt: now, invocations: [] };
-    state.invocations.push({ id: invocationId, command, actor, createdAt: now, attempts: [{ number: 1, status: "running", startedAt: now }] });
+    state.invocations.push({ id: invocationId, command, actor, createdAt: now, ...(revision ? { revision } : {}), attempts: [{ number: 1, status: "running", startedAt: now }] });
     state.updatedAt = now;
     await this.saveTarget(state);
     return state;

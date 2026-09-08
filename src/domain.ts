@@ -127,6 +127,17 @@ export interface AnalysisResult {
   recommendation: "proceed" | "needs_human" | "reject";
 }
 
+export type MergeReviewVerdict = "blocking" | "needs_attention" | "merge_ready";
+export interface MergeReviewResult {
+  summary: string;
+  coreChanges: string[];
+  logicClosure: string;
+  requirementCoverage: string;
+  findings: Array<{ severity: RiskLevel; title: string; evidence: string; recommendation: string }>;
+  residualRisks: string[];
+  recommendedVerdict: MergeReviewVerdict;
+}
+
 export interface ChangeRequest {
   id: string;
   number: number;

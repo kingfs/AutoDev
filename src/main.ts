@@ -14,6 +14,7 @@ import { CommandStateStore } from "./state/command-store.js";
 import { executeGitLabCommand } from "./controller/command.js";
 import type { AutoDevConfig } from "./config/schema.js";
 import type { WorkItem } from "./domain.js";
+import { reviewMergeRequest } from "./controller/merge-request-review.js";
 
 async function main(): Promise<void> {
   const config = await loadConfig(process.env.AUTODEV_CONFIG ?? "/etc/autodev/config.yml");
@@ -33,6 +34,15 @@ async function main(): Promise<void> {
         store: new CommandStateStore(path.join(stateRoot, "commands")),
         runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }),
         runIssue: (item, retry) => runIssueWorkflow(item, config, workspace, stateRoot, retry),
+        reviewMergeRequest: async (mr) => {
+          const leases = new FileLeaseManager(path.join(stateRoot, "leases"));
+          const owner = `mr-review-${mr.iid}-${mr.headSha}`;
+          const lease = await leases.acquire(`gitlab:${commandEvent.project.id}`, owner, parseDuration(config.automation.run_timeout) + 300_000);
+          if (!lease) throw new Error(`repository ${commandEvent.project.fullName} already has an active AutoDev run`);
+          try {
+            return await reviewMergeRequest(mr, { config, workspace, artifactRoot: path.join(stateRoot, "artifacts", "merge-reviews", String(mr.iid)), runtime: new AgentComposeRuntime({ provider: config.automation.agent_provider, workspace, stateRoot: path.join(stateRoot, "agent"), timeoutMs: parseDuration(config.automation.run_timeout), redactedEnv: config.security.agent_redacted_env }), scm, projectId: commandEvent.project.id });
+          } finally { await leases.release(lease); }
+        },
       });
       console.log(`__AUTODEV_COMMAND_RESULT__${JSON.stringify(result)}`);
       return;

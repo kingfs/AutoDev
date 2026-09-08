@@ -44,3 +44,13 @@ export const analysisSchema = z.object({
   questions: z.array(z.string()),
   recommendation: z.enum(["proceed", "needs_human", "reject"]),
 });
+
+export const mergeReviewSchema = z.object({
+  summary: z.string(),
+  coreChanges: z.array(z.string()),
+  logicClosure: z.string(),
+  requirementCoverage: z.string(),
+  findings: z.array(z.object({ severity: risk, title: z.string(), evidence: z.string(), recommendation: z.string() })),
+  residualRisks: z.array(z.string()),
+  recommendedVerdict: z.enum(["blocking", "needs_attention", "merge_ready"]),
+});

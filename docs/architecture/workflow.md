@@ -7,6 +7,17 @@ intake → workspace → analyze → plan → gates → implement
        → verify → review → publish → ci → report
 ```
 
+MR 使用独立的只读合入审查流程：
+
+```text
+MR event/review command → authoritative snapshot → exact SHA checkout
+                        → deterministic gates → semantic review
+                        → blocking | needs_attention | merge_ready → MR comment
+```
+
+同一 MR 只保留一条 AutoDev 合入结论评论。新 head SHA 会更新该评论并替换旧结论；
+审查过程不 Approve、不 Merge，也不修改作者分支。
+
 `implement`、`verify`、`publish` 和 `ci` 都与代码 revision 绑定。每次 Repair
 都会创建新 revision，并让旧 revision 的验证、发布和 CI 证据失效。
 

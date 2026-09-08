@@ -44,6 +44,7 @@ describe("GitLab command events", () => {
     expect(parseAutoDevCommand("/autodev status")).toBe("status");
     expect(parseAutoDevCommand("@autodev run")).toBe("run");
     expect(parseAutoDevCommand("@autodev retry")).toBe("retry");
+    expect(parseAutoDevCommand("@autodev review")).toBe("review");
     expect(parseAutoDevCommand("@autodev")).toBe("help");
     expect(parseAutoDevCommand("ordinary comment")).toBeNull();
   });

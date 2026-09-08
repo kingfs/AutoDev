@@ -10,7 +10,7 @@ const config = {
   security: { allowed_actors: [], gitlab_min_access_level: 30 },
 } as unknown as AutoDevConfig;
 
-function event(command: "help" | "status" | "analyze" | "run" | "retry" = "help") {
+function event(command: "help" | "status" | "analyze" | "run" | "retry" | "review" = "help") {
   return { deliveryId: "delivery", eventKind: "note" as const, actor: { id: 7, username: "alice" }, project: { id: "1", fullName: "group/repo" }, target: { kind: "issue" as const, iid: 3 }, noteId: 9, command };
 }
 
@@ -27,8 +27,8 @@ function dependencies() {
     claim: vi.fn().mockResolvedValue(true),
     loadTarget: vi.fn().mockImplementation(async () => targetState),
     saveTarget: vi.fn().mockImplementation(async (state: CommandTargetState) => { targetState = state; }),
-    startInvocation: vi.fn().mockImplementation(async (targetKey: string, id: string, command: string, actor: string) => {
-      const now = new Date().toISOString(); targetState = { targetKey, updatedAt: now, invocations: [{ id, command, actor, createdAt: now, attempts: [{ number: 1, status: "running", startedAt: now }] }] }; return targetState;
+    startInvocation: vi.fn().mockImplementation(async (targetKey: string, id: string, command: string, actor: string, revision?: string) => {
+      const now = new Date().toISOString(); const invocation = { id, command, actor, createdAt: now, ...(revision ? { revision } : {}), attempts: [{ number: 1, status: "running" as const, startedAt: now }] }; targetState = targetState ? { ...targetState, updatedAt: now, invocations: [...targetState.invocations, invocation] } : { targetKey, updatedAt: now, invocations: [invocation] }; return targetState;
     }),
     finishInvocation: vi.fn().mockImplementation(async (_targetKey: string, id: string, status: "completed" | "failed", summary: string) => {
       const attempt = targetState?.invocations.find((entry) => entry.id === id)?.attempts.at(-1); if (attempt) { attempt.status = status; attempt.summary = summary; }
@@ -70,6 +70,18 @@ describe("GitLab command controller", () => {
     await executeGitLabCommand(event("retry"), deps);
     expect(deps.runIssue).toHaveBeenCalledWith(expect.any(Object), true);
     expect(deps.store.startInvocation).toHaveBeenCalledWith("gitlab:1:issue:3", "9:retry", "retry", "alice");
+  });
+
+  it("dispatches an automatic MR event once per authoritative SHA", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.scm.target).mockResolvedValue({ kind: "merge_request", iid: 4, title: "MR", description: "", state: "opened", webUrl: "https://git/mr/4", labels: [], targetBranch: "main", sourceBranch: "feature", headSha: "abc" });
+    const reviewMergeRequest = vi.fn().mockResolvedValue({ status: "merge_ready", revision: "abc", summary: "ready" });
+    const { command: _command, ...baseEvent } = event("review");
+    const mrEvent = { ...baseEvent, eventKind: "merge_request" as const, target: { kind: "merge_request" as const, iid: 4 } };
+    await expect(executeGitLabCommand(mrEvent, { ...deps, reviewMergeRequest })).resolves.toEqual({ status: "completed", reason: "review merge_ready" });
+    expect(reviewMergeRequest).toHaveBeenCalledWith(expect.objectContaining({ headSha: "abc" }));
+    await expect(executeGitLabCommand({ ...mrEvent, deliveryId: "delivery-2" }, { ...deps, reviewMergeRequest })).resolves.toEqual({ status: "ignored", reason: "merge request revision already reviewed" });
+    expect(reviewMergeRequest).toHaveBeenCalledOnce();
   });
 
   it("ignores bot events and duplicate deliveries", async () => {

@@ -30,7 +30,7 @@
 
 验收：同一 Issue 可分析、补充信息、重试和实现，历史结果完整且无重复 MR。
 
-## M3：MR 只读合入审查
+## M3：MR 只读合入审查——已编码，等待真实 MR 证明
 
 - 获取精确 target branch、head SHA、diff、commits、现有 notes/discussions；
 - 确定性检查：构建、测试、类型、Lint、禁止路径、敏感信息、变更范围；

@@ -34,3 +34,14 @@ export function addChangedPathGates(gates: QualityGate[], config: AutoDevConfig,
   }
   return result;
 }
+
+export function materializeMergeRequestGates(config: AutoDevConfig, changedFiles: string[]): QualityGate[] {
+  const gates: QualityGate[] = [
+    { id: "git-changes", type: "git", description: "The MR contains a non-empty change.", required: true, source: "global" },
+    { id: "denied-paths", type: "path", description: "No denied path is changed.", required: true, source: "global" },
+    { id: "change-limits", type: "security", description: "The MR stays within configured limits.", required: true, source: "global" },
+    { id: "secret-scan", type: "security", description: "The MR contains no credential material.", required: true, source: "global" },
+    ...config.verification.commands.map((check) => ({ id: check.id, type: "command" as const, description: `Run ${check.command}`, required: true, command: check.command, ...(check.cwd ? { cwd: check.cwd } : {}), source: "repository" as const })),
+  ];
+  return addChangedPathGates(gates, config, changedFiles);
+}

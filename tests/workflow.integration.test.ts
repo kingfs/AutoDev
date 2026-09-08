@@ -41,6 +41,7 @@ describe("workflow integration", () => {
     const review: ReviewResult = { approved: true, summary: "approved", acceptanceCoverage: [{ criterion: "file exists", covered: true, evidence: "diff" }], findings: [] };
     const runtime: DevelopmentRuntime = {
       analyze: vi.fn().mockResolvedValue({ value: { summary: "valid bounded task", codeEvidence: [{ path: "README.md", symbol: "", evidence: "fixture target" }], validity: "valid", necessity: "needed", feasibility: "feasible", acceptanceCriteria: ["file exists"], risks: [], questions: [], recommendation: "proceed" }, threadId: "a", transcript: "" }),
+      reviewMergeRequest: vi.fn(),
       plan: vi.fn().mockResolvedValue({ value: plan, threadId: "p", transcript: "" }),
       implement: vi.fn().mockImplementation(async () => { await runChecked("bash", ["-lc", "echo broken > feature.txt"], { cwd: workspace }); return { value: implementation, threadId: "i", transcript: "" }; }),
       review: vi.fn().mockResolvedValue({ value: review, threadId: "r", transcript: "" }),

@@ -19,10 +19,12 @@ Agent/LLM Runtime、Secret 注入和运行生命周期；AutoDev 在其上实现
 ## 能做什么
 
 - 接收 GitLab Issue Hook 和 GitHub Issues Webhook；
+- 接收 GitLab Merge Request/Note Hook，并对 MR 当前精确 SHA 执行只读合入审查；
 - 按仓库、标签、Issue 作者和事件操作者执行准入；
 - 为任务准备 Git 基线和独立任务分支；
 - 调用 Agent 完成 Plan、Implement、Review、Repair；
 - 执行仓库预先配置的测试、类型检查、Lint、构建等质量门禁；
+- 对 MR 输出 `blocking`、`needs_attention` 或 `merge_ready`，并更新一条 SHA 绑定的幂等评论；
 - 检查禁止修改路径、敏感信息、文件数量和文件大小；
 - 在验证通过后提交并推送代码，创建或更新 Draft MR/PR；
 - 观察与推送 Commit SHA 严格一致的 GitLab Pipeline 或 GitHub Actions；
@@ -291,6 +293,8 @@ export AUTODEV_WEBHOOK_TOKEN='<使用密码生成器生成的随机值>'
 `run` 会先执行代码事实分析，只有结论为 `proceed` 才进入计划和实现；`retry` 会重新
 执行终态任务的准入，并按需要重新分析。若使用 Project Access Token，GitLab 创建的真实 bot username
 并不是 `autodev`；AutoDev 仍会解析上述命令文本，也支持 `/autodev` 前缀。
+MR 创建、重新打开或更新时会自动审查新 head SHA；也可以使用 `@autodev review`
+显式重审当前 SHA。AutoDev 只发表评论，不执行 GitLab Approve 或 Merge。
 
 ### GitHub 接入
 
